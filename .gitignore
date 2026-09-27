@@ -1,0 +1,3 @@
+# Your music stays on this computer: never commit or upload the Songs folder.
+Songs/
+__pycache__/
