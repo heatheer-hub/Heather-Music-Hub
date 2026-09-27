@@ -437,6 +437,7 @@
     if (!isTouch() || window.innerWidth >= window.innerHeight) return Promise.resolve(true);
     try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) { /* optional */ }
     const overlay = $('rotate-overlay');
+    $('rotate-tip').classList.toggle('hidden', !(isIOS() && !isStandalone()));
     overlay.classList.remove('hidden');
     return new Promise(resolve => {
       const done = (ok) => {
@@ -518,7 +519,7 @@
       const m = Math.round(r.meanOffsetMs);
       timing += 'Average timing: ' + (m === 0 ? 'spot on' : Math.abs(m) + ' ms ' + (m > 0 ? 'late' : 'early')) + '.';
       if (Math.abs(m) >= 20) {
-        const suggested = U.clamp(Math.round((settings.offsetMs + m) / 5) * 5, -150, 300);
+        const suggested = U.clamp(Math.round((settings.offsetMs + m) / 5) * 5, -150, 400);
         timing += ' Suggested audio offset: ' + (suggested > 0 ? '+' : '') + suggested + ' ms.';
         applyBtn.dataset.value = suggested;
         applyBtn.classList.remove('hidden');
@@ -1026,6 +1027,98 @@
     } catch (e) { /* optional */ }
   }
 
+  // ---------- audio sync test ----------
+  // Plays clicks and records when you tap along. The median delay between hearing a click and
+  // tapping is exactly what the audio offset must absorb (Bluetooth headphones add 150–250 ms).
+  const CALIB = { bpm: 100, clicks: 16, lead: 1.2, skip: 3 };
+  let calib = null;
+
+  function clickBuffer() {
+    const ctx = PTAudio.getContext();
+    const sr = ctx.sampleRate, beat = 60 / CALIB.bpm;
+    const len = Math.ceil((CALIB.lead + CALIB.clicks * beat + 0.5) * sr);
+    const buf = ctx.createBuffer(1, len, sr);
+    const d = buf.getChannelData(0);
+    for (let k = 0; k < CALIB.clicks; k++) {
+      const s0 = Math.round((CALIB.lead + k * beat) * sr);
+      const f = k % 4 === 0 ? 1500 : 1000;
+      for (let i = 0; i < 0.05 * sr && s0 + i < len; i++) d[s0 + i] = 0.8 * Math.sin(2 * Math.PI * f * i / sr) * Math.exp(-i / sr * 60);
+    }
+    return buf;
+  }
+
+  function openCalib() {
+    $('calib-result').textContent = '';
+    $('calib-count').textContent = 'Tap the circle on every click.';
+    $('btn-calib-start').disabled = false;
+    $('btn-calib-start').textContent = 'Start';
+    $('calib').classList.remove('hidden');
+  }
+
+  function closeCalib() {
+    if (calib) { calib.player.stop(); clearTimeout(calib.timer); calib = null; }
+    $('calib').classList.add('hidden');
+  }
+
+  function startCalib() {
+    const ctx = PTAudio.getContext();
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    if (calib) { calib.player.stop(); clearTimeout(calib.timer); }
+    const player = new PTAudio.SongPlayer(clickBuffer());
+    player.userOffset = 0;
+    player.play(-0.2);
+    const beat = 60 / CALIB.bpm;
+    calib = { player, taps: [], timer: setTimeout(finishCalib, (0.2 + CALIB.lead + CALIB.clicks * beat + 0.7) * 1000) };
+    $('btn-calib-start').disabled = true;
+    $('btn-calib-start').textContent = 'Listening…';
+    $('calib-result').textContent = '';
+    $('calib-count').textContent = 'Taps: 0';
+  }
+
+  function calibTap(e) {
+    e.preventDefault();
+    if (!calib) return;
+    const beat = 60 / CALIB.bpm;
+    const t = calib.player.timeAtEvent(e);
+    const k = Math.round((t - CALIB.lead) / beat);
+    if (k < CALIB.skip || k >= CALIB.clicks) { $('calib-count').textContent = 'Taps: ' + calib.taps.length; return; }
+    const dt = t - (CALIB.lead + k * beat);
+    if (Math.abs(dt) < beat * 0.45) calib.taps.push(dt);
+    $('calib-count').textContent = 'Taps: ' + calib.taps.length;
+    const pad = $('calib-pad');
+    pad.classList.remove('hit'); void pad.offsetWidth; pad.classList.add('hit');
+  }
+
+  function finishCalib() {
+    if (!calib) return;
+    const taps = calib.taps.slice().sort((a, b) => a - b);
+    calib.player.stop();
+    calib = null;
+    $('btn-calib-start').disabled = false;
+    $('btn-calib-start').textContent = 'Try again';
+    if (taps.length < 6) {
+      $('calib-result').textContent = 'Only ' + taps.length + ' taps counted. Tap once on every click after the first few, then try again.';
+      return;
+    }
+    const med = taps[taps.length >> 1] * 1000;
+    const ms = U.clamp(Math.round(med / 5) * 5, -150, 400);
+    settings.offsetMs = ms;
+    saveSettings();
+    $('offset').value = ms;
+    $('offset-out').textContent = (ms > 0 ? '+' : '') + ms + ' ms';
+    $('calib-result').textContent = Math.abs(med) < 15
+      ? 'Your taps land right on the clicks (' + Math.round(med) + ' ms). Audio offset set to ' + ms + ' ms.'
+      : 'Your taps land ' + Math.abs(Math.round(med)) + ' ms ' + (med > 0 ? 'after' : 'before') + ' the clicks. Audio offset set to ' + (ms > 0 ? '+' : '') + ms + ' ms.';
+  }
+
+  // ---------- install hint (iPhone Safari) ----------
+  function isIOS() { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+  function isStandalone() { return navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches); }
+  function renderInstallHint() {
+    const show = isIOS() && !isStandalone() && window.top === window && !U.store.get('hmh:hideInstall', false);
+    $('install-card').classList.toggle('hidden', !show);
+  }
+
   // ---------- records, rewards and guide tabs ----------
   const DIFF_SHORT = { vnormal: 'V · Normal', vhard: 'V · Hard', hnormal: 'H · Normal', hhard: 'H · Hard' };
   const CLEAR_BADGE = { fc: 'FC', ap: 'AP', fail: 'LOST' };
@@ -1106,7 +1199,7 @@
     $('wallet').innerHTML = levelBlock(PTProgress.levelInfo(p.exp), p.coins) + (msg ? '<p class="status wallet-msg">' + esc(msg) + '</p>' : '');
     $('shop-skins').innerHTML = PTProgress.SHOP.filter(i => i.type === 'skin').map(item => {
       const skin = PTProgress.SKINS[item.key];
-      const tiles = skin.lanes.map(c => '<i style="background:linear-gradient(' + c[1] + ',' + c[0] + ')"></i>').join('');
+      const tiles = [['Tap', skin.tap], ['Hold', skin.hold], ['Flick', skin.flick]].map(([k, c]) => '<i title="' + k + '" style="background:' + c + '"></i>').join('');
       return '<div class="shop-item"><div class="skin-preview">' + tiles + '</div><div class="shop-name">' + skin.name + '</div>' + shopButton(item) + '</div>';
     }).join('');
     $('shop-themes').innerHTML = PTProgress.SHOP.filter(i => i.type === 'theme').map(item => {
@@ -1206,6 +1299,12 @@
     $('btn-newsong').addEventListener('click', () => { input.value = ''; show('screen-home'); });
     initLibrary();
     $('cloud-card').addEventListener('click', onCloudCard);
+    $('btn-calibrate').addEventListener('click', openCalib);
+    $('btn-calib-start').addEventListener('click', startCalib);
+    $('btn-calib-close').addEventListener('click', closeCalib);
+    $('calib-pad').addEventListener('pointerdown', calibTap);
+    $('btn-install-hide').addEventListener('click', () => { U.store.set('hmh:hideInstall', true); renderInstallHint(); });
+    renderInstallHint();
     $('btn-cloud-connect').addEventListener('click', connectCloud);
     $('btn-cloud-cancel').addEventListener('click', () => $('cloud-dialog').classList.add('hidden'));
     // Coming back to the app (e.g. reopening it on the phone) checks the cloud for new songs.

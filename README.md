@@ -59,7 +59,7 @@ These are modeled on Arcaea, Phigros and SuperStar, and are saved on the device 
   - Clears give coins, scaled by grade and chart level.
   - Bonuses for a first clear, first Full Combo, first All Perfect, a new best and each level up.
   - 17 achievements pay coins; *Pure Memory* unlocks the Gold skin and *Rising Star* the Nebula theme.
-- **Shop** (Rewards tab): tile skins (Aurora, Ivory, Sakura, Ember, Prism, Gold) and stage themes (Song colors, Ocean, Sunset, Forest, Midnight, Nebula).
+- **Shop** (Rewards tab): tile skins (Aurora, Ivory, Sakura, Ember, Mint, Gold; each sets one plain colour for taps, holds and flicks) and stage themes (Song colors, Ocean, Sunset, Forest, Midnight, Nebula).
 - **Records tab:** level, rating, totals, the best score and clear type for each song's four charts, and your last 12 plays. *Save backup* / *Restore backup* moves everything to another device as a JSON file.
 
 The **Guide** tab explains everything above, with separate instructions for phone and computer.
@@ -91,6 +91,20 @@ Songs added in Safari don't appear in the home-screen app (iOS keeps their stora
 so add them from inside the installed app. To remove a song, tap × and then **Remove**.
 After changing the code, push to GitHub and bump `VERSION` in `sw.js`; the phone picks up the
 update the next time the app is opened.
+
+### Playing on iPhone: use the Home Screen app
+
+In Safari the address bar and tabs cover part of the game, especially in landscape. Install it
+once from Safari: tap **Share → Add to Home Screen**, then always start it from the Home Screen
+icon. It runs full screen in both orientations, with the HUD kept clear of the notch, and works
+offline. The app shows this tip in Safari on iPhone.
+
+A native App Store app would need a Mac with Xcode and an Apple Developer account; the Home
+Screen app gives the same full-screen experience without either.
+
+**Timing / "lag":** on the chart screen, **Test with taps** plays 16 clicks. Tap along to what you
+hear and it sets the audio offset automatically. Do this with the headphones you play with;
+Bluetooth headphones usually need +150 to +250 ms.
 
 ### Cloud library (songs shared between computer and phone)
 

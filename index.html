@@ -29,6 +29,17 @@
         <div class="home-chip" id="home-chip"></div>
       </header>
 
+      <div class="card install hidden" id="install-card">
+        <div class="install-head"><b>Play full screen</b><button class="icon-btn small" id="btn-install-hide" aria-label="Hide this tip">×</button></div>
+        <p>In Safari, the address bar and tabs cover the game, especially sideways. Install the app instead:</p>
+        <ol>
+          <li>Tap <b>Share</b> <span class="share-glyph" aria-hidden="true"></span> at the bottom of Safari.</li>
+          <li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li>
+          <li>Open <b>Heather Music Hub</b> from your Home Screen. It runs full screen, also sideways, and works offline.</li>
+        </ol>
+        <p class="fine">The installed app keeps its own songs and scores, so connect the Cloud library there once.</p>
+      </div>
+
       <div class="card cloud" id="cloud-card"></div>
 
       <div class="card library hidden" id="library">
@@ -136,8 +147,9 @@
         </div>
         <div class="setting">
           <div class="setting-head"><span>Audio offset</span><output id="offset-out">0 ms</output></div>
-          <input type="range" id="offset" min="-150" max="300" step="5" value="0">
-          <p class="fine">Raise it if your hits are judged late (e.g. Bluetooth headphones).</p>
+          <input type="range" id="offset" min="-150" max="400" step="5" value="0">
+          <p class="fine">Raise it if your hits are judged late (e.g. Bluetooth headphones), or let the sync test set it.</p>
+          <button class="btn small" id="btn-calibrate">Test with taps</button>
         </div>
       </div>
 
@@ -159,6 +171,7 @@
           <div class="rotate-phone" aria-hidden="true"></div>
           <h2>Turn your phone sideways</h2>
           <p class="fine">Horizontal mode plays in landscape. It starts as soon as you rotate.</p>
+          <p class="fine rotate-tip hidden" id="rotate-tip">Tip: open the app from your Home Screen icon so Safari's bars don't cover the track.</p>
           <button class="btn ghost big" id="btn-rotate-back">Back</button>
         </div>
       </div>
@@ -334,6 +347,18 @@
         <p class="status" id="cloud-dialog-status" role="status"></p>
         <button class="btn primary big" id="btn-cloud-connect">Connect</button>
         <button class="btn ghost big" id="btn-cloud-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <div class="overlay fixed hidden" id="calib" role="dialog" aria-modal="true" aria-labelledby="calib-title">
+      <div class="overlay-card calib-card">
+        <h2 id="calib-title">Sync test</h2>
+        <p class="fine">Use the headphones or speaker you play with. Press <b>Start</b>, then tap the circle every time you <b>hear</b> a click. Listen rather than watch. 16 clicks, the first 3 are warm-up.</p>
+        <button class="calib-pad" id="calib-pad" aria-label="Tap on each click"></button>
+        <p class="calib-count" id="calib-count">Tap the circle on every click.</p>
+        <p class="status" id="calib-result" role="status"></p>
+        <button class="btn primary big" id="btn-calib-start">Start</button>
+        <button class="btn ghost big" id="btn-calib-close">Done</button>
       </div>
     </div>
 

@@ -15,13 +15,14 @@
   const GRADE_MULT = { AP: 2, SS: 1.7, S: 1.5, A: 1.3, B: 1.15, C: 1, F: 0.5 };
 
   // ---------- looks ----------
+  // A skin is one plain colour per note type.
   const SKINS = {
-    aurora: { name: 'Aurora', lanes: [['#8af7ff', '#1fa8ff'], ['#a9c4ff', '#4a5dff'], ['#dcc2ff', '#8a45ff'], ['#ffb3e0', '#ff3f9a']] },
-    ivory: { name: 'Ivory', lanes: [['#ffffff', '#b9c1d6'], ['#ffffff', '#b9c1d6'], ['#ffffff', '#b9c1d6'], ['#ffffff', '#b9c1d6']] },
-    sakura: { name: 'Sakura', lanes: [['#ffe1ee', '#ff8fc0'], ['#ffd6ea', '#ff6fae'], ['#ffc9e2', '#f0579a'], ['#ffe9f3', '#ff9dc8']] },
-    ember: { name: 'Ember', lanes: [['#ffe0a3', '#ff8a2b'], ['#ffc98a', '#ff6a2b'], ['#ffb38a', '#ff4d3d'], ['#ffd0a0', '#ff7a1f']], flick: ['#b8f3ff', '#2fb6ff'] },
-    prism: { name: 'Prism', lanes: [['#ff9aa8', '#ff3d5a'], ['#ffe28a', '#ffb020'], ['#9df5b8', '#22c36b'], ['#9fd4ff', '#2f7dff']] },
-    gold: { name: 'Gold', lanes: [['#fff3c4', '#e0a526'], ['#fff3c4', '#e0a526'], ['#fff3c4', '#e0a526'], ['#fff3c4', '#e0a526']], flick: ['#b8f3ff', '#2fb6ff'] }
+    aurora: { name: 'Aurora', tap: '#35b6ff', hold: '#9b6bff', flick: '#ff8a3d' },
+    ivory: { name: 'Ivory', tap: '#f2f4fa', hold: '#a58bff', flick: '#ff8a3d' },
+    sakura: { name: 'Sakura', tap: '#ff7eb6', hold: '#b58cff', flick: '#ffb13d' },
+    ember: { name: 'Ember', tap: '#ff6a2b', hold: '#b58cff', flick: '#2fb6ff' },
+    prism: { name: 'Mint', tap: '#2ee6a6', hold: '#9b6bff', flick: '#ff8a3d' },
+    gold: { name: 'Gold', tap: '#f5c542', hold: '#9b6bff', flick: '#2fb6ff' }
   };
   const THEMES = {
     song: { name: 'Song colors', hue: null, sat: 1 },

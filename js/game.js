@@ -26,21 +26,15 @@
     good: { label: 'GOOD', color: '#ffd166', acc: 0.4 },
     miss: { label: 'MISS', color: '#ff5c7a', acc: 0 }
   };
-  const NOTE_COLORS = {
-    tap: ['#8af7ff', '#3d6bff'],
-    hold: ['#e0c8ff', '#7a45ff'],
-    flick: ['#ffd27a', '#ff4f9a'],
-    pair: ['#fff4b0', '#ffa62b'],
-    sky: ['#ffffff', '#ffd166']
-  };
+  // One plain colour per note type (a skin can change them). Doubles are taps with a white outline.
+  const NOTE_COLORS = { tap: '#35b6ff', hold: '#9b6bff', flick: '#ff8a3d', sky: '#ffd166', miss: '#ff5c7a' };
   const ARC_COLORS = ['#4de1ff', '#ff6fb5'];
-  // Vertical taps are tinted per lane: cyan, blue, violet, pink.
-  const LANE_COLORS = [['#8af7ff', '#1fa8ff'], ['#a9c4ff', '#4a5dff'], ['#dcc2ff', '#8a45ff'], ['#ffb3e0', '#ff3f9a']];
   const LANE_KEYS = {
     KeyD: 0, KeyF: 1, KeyJ: 2, KeyK: 3,
     ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3,
     Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3
   };
+  let insetProbe = null; // measures the notch / rounded-corner insets
   const FONT = 'Outfit, system-ui, -apple-system, sans-serif';
 
   // ---------- drawing helpers ----------
@@ -96,7 +90,7 @@
         const v = speed * (0.35 + Math.random() * 0.65);
         this.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - speed * 0.35, life: 0.35 + Math.random() * 0.35, age: 0, size: size * (0.5 + Math.random() * 0.7), color });
       }
-      if (this.parts.length > 360) this.parts.splice(0, this.parts.length - 360);
+      if (this.parts.length > 160) this.parts.splice(0, this.parts.length - 160);
     }
     spark(x, y, color, size, spread) {
       this.parts.push({ x: x + (Math.random() - 0.5) * spread, y, vx: (Math.random() - 0.5) * 80, vy: -120 - Math.random() * 160, life: 0.3 + Math.random() * 0.25, age: 0, size, color });
@@ -136,8 +130,9 @@
       for (const p of this.parts) {
         const k = p.age / p.life;
         g.globalAlpha = 1 - k;
-        const s = p.size * (1 - k * 0.5);
-        g.drawImage(glow(p.color), p.x - s, p.y - s, s * 2, s * 2);
+        const s = Math.max(1.5, p.size * 0.45 * (1 - k * 0.5));
+        g.fillStyle = p.color;
+        g.fillRect(p.x - s, p.y - s, s * 2, s * 2);
       }
       g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
@@ -148,7 +143,10 @@
   class BaseGame {
     constructor(opts) {
       this.canvas = opts.canvas;
-      this.g = this.canvas.getContext('2d', { alpha: false });
+      this.g = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
+      this.maxDpr = 2;          // lowered automatically if the device cannot keep up
+      this.slowFrames = 0;
+      this.frameCount = 0;
       this.chart = opts.chart;
       this.analysis = opts.analysis;
       this.player = opts.player;
@@ -272,7 +270,8 @@
     }
 
     resize() {
-      const dpr = Math.min(global.devicePixelRatio || 1, 2);
+      const dpr = Math.min(global.devicePixelRatio || 1, this.maxDpr || 2);
+      this.dpr = dpr;
       const r = this.canvas.getBoundingClientRect();
       this.W = Math.max(1, r.width);
       this.H = Math.max(1, r.height);
@@ -280,6 +279,15 @@
       this.canvas.height = Math.round(this.H * dpr);
       this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.unit = Math.min(this.W, this.H) / 400; // scale for effects and text
+      // Keep HUD text clear of the notch / rounded corners (installed app in landscape).
+      if (!insetProbe) {
+        insetProbe = document.createElement('div');
+        insetProbe.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;pointer-events:none;padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)';
+        document.body.appendChild(insetProbe);
+      }
+      const cs = getComputedStyle(insetProbe);
+      this.insetL = parseFloat(cs.paddingLeft) || 0;
+      this.insetR = parseFloat(cs.paddingRight) || 0;
       this.layout();
     }
 
@@ -382,7 +390,7 @@
       if (swiped) {
         this.stats.flicksSwiped++;
         const pos = this.notePos(n);
-        this.fx.burst(pos.x, pos.y - 20 * this.unit, NOTE_COLORS.flick[0], 10, 520 * this.unit, 9 * this.unit);
+        this.fx.burst(pos.x, pos.y - 20 * this.unit, this.colorOf('flick'), 6, 520 * this.unit, 9 * this.unit);
       }
     }
 
@@ -428,8 +436,8 @@
       this.stats.holdsDone++;
       this.judgeUnit('perfect', null, t);
       const pos = this.notePos(n);
-      this.fx.ring(pos.x, pos.y, NOTE_COLORS.hold[0], 10 * this.unit, 70 * this.unit, 0.45, 5 * this.unit);
-      this.fx.burst(pos.x, pos.y, NOTE_COLORS.hold[0], 16, 460 * this.unit, 10 * this.unit);
+      this.fx.ring(pos.x, pos.y, this.colorOf('hold'), 10 * this.unit, 70 * this.unit, 0.45, 5 * this.unit);
+      this.fx.burst(pos.x, pos.y, this.colorOf('hold'), 8, 460 * this.unit, 10 * this.unit);
     }
 
     releaseHold(n, t) {
@@ -440,11 +448,20 @@
 
     hitEffect(pos, j, n) {
       const u = this.unit;
-      const c = n.pair ? NOTE_COLORS.pair[0] : (NOTE_COLORS[n.type] || NOTE_COLORS.tap)[0];
+      const c = this.colorOf(n.type);
       const jc = JUDGE[j].color;
-      this.fx.flash(pos.x, pos.y, c, (j === 'perfect' ? 70 : 50) * u, 0.22);
+      this.fx.flash(pos.x, pos.y, c, (j === 'perfect' ? 60 : 44) * u, 0.2);
       this.fx.ring(pos.x, pos.y, jc, 12 * u, (j === 'perfect' ? 64 : 48) * u, 0.38, 5 * u);
-      this.fx.burst(pos.x, pos.y, c, j === 'perfect' ? 14 : 8, 420 * u, 9 * u);
+      this.fx.burst(pos.x, pos.y, c, j === 'perfect' ? 8 : 5, 420 * u, 9 * u);
+    }
+
+    // The single colour of a note type, from the equipped skin when it sets one.
+    colorOf(type) {
+      const sk = this.skin || {};
+      if (type === 'hold') return sk.hold || NOTE_COLORS.hold;
+      if (type === 'flick') return sk.flick || NOTE_COLORS.flick;
+      if (type === 'sky') return NOTE_COLORS.sky;
+      return sk.tap || NOTE_COLORS.tap;
     }
 
     satp(v) { return Math.round(Math.min(100, v * this.sat)); }
@@ -490,6 +507,20 @@
       this.displayScore += (target - this.displayScore) * Math.min(1, dt * 12);
       if (Math.abs(target - this.displayScore) < 1) this.displayScore = target;
       this.draw(this.paused ? this.pausedAt : now, dt);
+      // Keep motion smooth on slower phones: if many frames take longer than ~22 ms, render at a
+      // lower resolution (2x -> 1.5x -> 1x). Only ever steps down, so it cannot flicker.
+      if (!this.paused && dt > 0) {
+        this.frameCount++;
+        if (dt > 0.022) this.slowFrames++;
+        if (this.frameCount >= 90) {
+          if (this.slowFrames > 30 && this.maxDpr > 1) {
+            this.maxDpr = this.maxDpr > 1.5 ? 1.5 : 1;
+            this.resize();
+          }
+          this.frameCount = 0;
+          this.slowFrames = 0;
+        }
+      }
     }
 
     update(now) {
@@ -508,9 +539,9 @@
         if (n.t > now) break;
         if (n.hold === 1) {
           if (now >= n.t + n.dur) this.completeHold(n, now);
-          else if (Math.random() < 0.6) {
+          else if (Math.random() < 0.3) {
             const pos = this.notePos(n);
-            this.fx.spark(pos.x, pos.y, NOTE_COLORS.hold[0], 7 * this.unit, 24 * this.unit);
+            this.fx.spark(pos.x, pos.y, this.colorOf('hold'), 7 * this.unit, 24 * this.unit);
           }
         }
       }
@@ -561,9 +592,7 @@
       const prog = Math.max(0, Math.min(1, (now - this.rangeStart) / span));
       g.fillStyle = 'rgba(255,255,255,0.08)';
       g.fillRect(0, 0, W, 4);
-      const pg = g.createLinearGradient(0, 0, W, 0);
-      pg.addColorStop(0, '#4de1ff'); pg.addColorStop(1, '#ff6fb5');
-      g.fillStyle = pg;
+      g.fillStyle = '#4de1ff';
       g.fillRect(0, 0, W * prog, 4);
       g.fillStyle = 'rgba(255,255,255,0.35)';
       for (const sec of this.analysis.sections) {
@@ -571,7 +600,7 @@
       }
 
       // Score + accuracy.
-      const pad = 16;
+      const pad = 16 + (this.insetR || 0);
       g.textAlign = 'right';
       g.textBaseline = 'top';
       g.fillStyle = 'rgba(232,235,245,0.5)';
@@ -594,7 +623,7 @@
       g.fillText(acc.toFixed(2) + '%', W - pad, 30 + 24 + 4 * u);
 
       // Clear gauge next to the pause button; the notch marks the 70% needed to clear.
-      const gx = 68, gy = 24, gw = Math.min(190, W * 0.3), gh = 7;
+      const gx = 68 + (this.insetL || 0), gy = 24, gw = Math.min(190, W * 0.3), gh = 7;
       roundRect(g, gx, gy, gw, gh, 3.5);
       g.fillStyle = 'rgba(255,255,255,0.1)';
       g.fill();
@@ -618,13 +647,11 @@
       if (s.combo >= 3) {
         const bump = Math.max(0, 1 - (now - this.comboBumpAt) / 0.14);
         const size = Math.round((28 + 16 * u) * (comboScale || 1) * (1 + 0.14 * bump));
-        const cg = g.createLinearGradient(0, comboY - size / 2, 0, comboY + size / 2);
-        cg.addColorStop(0, '#ffffff'); cg.addColorStop(1, '#9fe8ff');
         g.font = '800 ' + size + 'px ' + FONT;
         g.lineWidth = 4;
         g.strokeStyle = 'rgba(6,7,12,0.55)';
         g.strokeText(String(s.combo), cx, comboY);
-        g.fillStyle = cg;
+        g.fillStyle = '#ffffff';
         g.fillText(String(s.combo), cx, comboY);
         g.fillStyle = 'rgba(232,235,245,0.5)';
         g.font = '700 ' + Math.round(10 + 1.5 * u) + 'px ' + FONT;
@@ -642,9 +669,7 @@
         g.lineWidth = 5;
         g.strokeStyle = 'rgba(6,7,12,0.6)';
         g.strokeText(J.label, cx, judgeY - k * 8);
-        const jg = g.createLinearGradient(0, judgeY - size / 2, 0, judgeY + size / 2);
-        jg.addColorStop(0, '#ffffff'); jg.addColorStop(1, J.color);
-        g.fillStyle = jg;
+        g.fillStyle = J.color;
         g.fillText(J.label, cx, judgeY - k * 8);
         if ((this.lastJudge === 'great' || this.lastJudge === 'good') && this.lastJudgeDt) {
           g.font = '700 ' + Math.round(10 + u) + 'px ' + FONT;
@@ -704,11 +729,50 @@
       this.hitY = Math.round(this.H * 0.8);
       this.maxTileH = Math.max(46, Math.min(this.hitY * 0.14, 130));
       this.hudCx = this.fieldX + this.fieldW / 2;
-      const g = this.g;
-      this.bgGrad = g.createLinearGradient(0, 0, 0, this.H);
-      this.bgGrad.addColorStop(0, 'hsl(' + this.hue + ',' + this.satp(48) + '%,11%)');
-      this.bgGrad.addColorStop(0.6, 'hsl(' + (this.hue + 25) + ',' + this.satp(52) + '%,6%)');
-      this.bgGrad.addColorStop(1, 'hsl(' + (this.hue + 40) + ',' + this.satp(55) + '%,4%)');
+      this.buildBackdrop();
+    }
+
+    // The static backdrop (colour wash, soft glows, stars, lane field) is drawn once per resize
+    // into an offscreen canvas; each frame then copies it in a single call.
+    buildBackdrop() {
+      const W = this.W, H = this.H, dpr = this.dpr || 1;
+      const c = document.createElement('canvas');
+      c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+      const g = c.getContext('2d');
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const bg = g.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, 'hsl(' + this.hue + ',' + this.satp(48) + '%,12%)');
+      bg.addColorStop(0.6, 'hsl(' + (this.hue + 25) + ',' + this.satp(52) + '%,7%)');
+      bg.addColorStop(1, 'hsl(' + (this.hue + 40) + ',' + this.satp(55) + '%,4%)');
+      g.fillStyle = bg;
+      g.fillRect(0, 0, W, H);
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = 0.22;
+      [[0.2, 0.25, this.hue], [0.85, 0.45, this.hue + 60], [0.45, 0.85, this.hue - 40]].forEach(([bx, by, h]) => {
+        const r = Math.max(W, H) * 0.6;
+        g.drawImage(glow(hslHex(h, this.satp(80), 55)), W * bx - r, H * by - r, r * 2, r * 2);
+      });
+      g.globalAlpha = 0.5;
+      g.fillStyle = '#dfe8ff';
+      for (const st of this.stars) g.fillRect(st.x * W, st.y * H, st.r, st.r);
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      const fx = this.fieldX, fw = this.fieldW, lw = this.laneW, hitY = this.hitY;
+      g.fillStyle = 'rgba(8,10,22,0.55)';
+      g.fillRect(fx, 0, fw, H);
+      g.fillStyle = 'rgba(160,190,255,0.12)';
+      for (let l = 0; l <= 4; l++) g.fillRect(Math.round(fx + l * lw) - 0.5, 0, 1, hitY);
+      for (let l = 0; l < 4; l++) {
+        const x = fx + l * lw + 5, w = lw - 10, y = hitY + 10, h = H - hitY - 22;
+        if (h < 20) break;
+        roundRect(g, x, y, w, h, 14);
+        g.fillStyle = 'rgba(255,255,255,0.035)';
+        g.fill();
+        g.strokeStyle = 'rgba(170,190,255,0.14)';
+        g.lineWidth = 1.5;
+        g.stroke();
+      }
+      this.backdrop = c;
     }
 
     laneAt(x) {
@@ -730,43 +794,8 @@
       const g = this.g, W = this.W, H = this.H, fx = this.fieldX, fw = this.fieldW, lw = this.laneW, hitY = this.hitY;
       const dNow = this.S.at(now);
       const pulse = this.beatPulse(now);
-      const energy = this.energyAt(now);
 
-      // Backdrop: hue gradient, drifting aurora and stars.
-      g.fillStyle = this.bgGrad;
-      g.fillRect(0, 0, W, H);
-      g.globalCompositeOperation = 'lighter';
-      const tt = now * 0.15;
-      const blobs = [[0.2, 0.25, this.hue], [0.85, 0.45, this.hue + 60], [0.45, 0.85, this.hue - 40]];
-      blobs.forEach(([bx, by, h], i) => {
-        const r = Math.max(W, H) * (0.55 + 0.1 * Math.sin(tt + i));
-        g.globalAlpha = 0.12 + 0.16 * energy + 0.08 * pulse;
-        const x = W * (bx + 0.08 * Math.sin(tt * 1.3 + i * 2));
-        const y = H * (by + 0.06 * Math.cos(tt + i));
-        g.drawImage(glow(hslHex(h, this.satp(80), 55)), x - r, y - r, r * 2, r * 2);
-      });
-      g.globalAlpha = 1;
-      for (const s of this.stars) {
-        const y = ((s.y + dNow * 0.12 * s.sp) % 1) * H;
-        g.globalAlpha = 0.25 + 0.35 * Math.abs(Math.sin(s.tw + now * 1.7));
-        g.fillStyle = '#dfe8ff';
-        g.fillRect(s.x * W, y, s.r, s.r);
-      }
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
-
-      // Glass field.
-      const fg = g.createLinearGradient(0, 0, 0, H);
-      fg.addColorStop(0, 'rgba(8,10,22,0.2)');
-      fg.addColorStop(0.75, 'rgba(8,10,22,0.62)');
-      fg.addColorStop(1, 'rgba(8,10,22,0.8)');
-      g.fillStyle = fg;
-      g.fillRect(fx, 0, fw, H);
-      const sepGrad = g.createLinearGradient(0, 0, 0, hitY);
-      sepGrad.addColorStop(0, 'rgba(160,190,255,0)');
-      sepGrad.addColorStop(1, 'rgba(160,190,255,0.16)');
-      g.fillStyle = sepGrad;
-      for (let l = 0; l <= 4; l++) g.fillRect(Math.round(fx + l * lw) - 0.5, 0, 1, hitY);
+      g.drawImage(this.backdrop, 0, 0, W, H);
 
       // Bar lines.
       g.fillStyle = 'rgba(255,255,255,0.06)';
@@ -776,45 +805,25 @@
         if (y <= hitY) g.fillRect(fx, Math.round(y), fw, 1);
       }
 
-      // Lane beams from presses.
+      // Lane light when pressed or just tapped.
       const pressed = new Set();
       for (const p of this.ptrs.values()) if (p.lane >= 0) pressed.add(p.lane);
       for (let l = 0; l < 4; l++) {
         const flash = Math.max(0, 1 - (now - this.laneFlash[l]) / 0.22);
-        const a = Math.max(pressed.has(l) ? 0.22 : 0, flash * 0.35);
+        const a = Math.max(pressed.has(l) ? 0.14 : 0, flash * 0.22);
         if (a > 0.01) {
-          const bg = g.createLinearGradient(0, hitY, 0, hitY - H * 0.55);
-          bg.addColorStop(0, 'rgba(110,220,255,' + a + ')');
-          bg.addColorStop(1, 'rgba(110,220,255,0)');
-          g.fillStyle = bg;
-          g.fillRect(fx + l * lw + 1, hitY - H * 0.55, lw - 2, H * 0.55);
+          g.fillStyle = 'rgba(110,220,255,' + a + ')';
+          g.fillRect(fx + l * lw + 1, hitY - H * 0.35, lw - 2, H * 0.35);
+          g.fillRect(fx + l * lw + 5, hitY + 10, lw - 10, H - hitY - 22);
         }
       }
 
       this.drawNotes(now, dNow);
 
-      // Touch pads below the line.
-      for (let l = 0; l < 4; l++) {
-        const x = fx + l * lw + 5, w = lw - 10, y = hitY + 10, h = H - hitY - 22;
-        if (h < 20) break;
-        const on = pressed.has(l);
-        roundRect(g, x, y, w, h, 14);
-        g.fillStyle = on ? 'rgba(110,220,255,0.22)' : 'rgba(255,255,255,0.035)';
-        g.fill();
-        g.strokeStyle = on ? 'rgba(140,235,255,0.7)' : 'rgba(170,190,255,0.14)';
-        g.lineWidth = 1.5;
-        g.stroke();
-      }
-
-      // Hit line with beat glow.
-      g.globalCompositeOperation = 'lighter';
-      g.globalAlpha = 0.25 + 0.35 * pulse;
-      g.drawImage(glow('#6fd8ff'), fx - 20, hitY - 26, fw + 40, 52);
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
-      const lg = g.createLinearGradient(fx, 0, fx + fw, 0);
-      lg.addColorStop(0, '#4de1ff'); lg.addColorStop(0.5, '#ffffff'); lg.addColorStop(1, '#b68cff');
-      g.fillStyle = lg;
+      // Hit line, brighter on the beat.
+      g.fillStyle = 'rgba(94,240,255,' + (0.1 + 0.2 * pulse) + ')';
+      g.fillRect(fx, hitY - 6, fw, 12);
+      g.fillStyle = '#e8f7ff';
       g.fillRect(fx, hitY - 1.5, fw, 3);
 
       this.fx.draw(g);
@@ -842,27 +851,16 @@
           if (bottom > H + 10 && yTail > H) continue;
           const top = Math.min(yTail, bottom - 10);
           g.globalAlpha = dim ? 0.3 : 1;
+          // Hold body: the hold colour, see-through, brighter while held.
           const bw = w * 0.62, bx = x + (w - bw) / 2;
-          const bg = g.createLinearGradient(0, top, 0, bottom);
-          bg.addColorStop(0, 'rgba(122,69,255,0.15)');
-          bg.addColorStop(1, holding ? 'rgba(170,140,255,0.85)' : 'rgba(122,69,255,0.6)');
-          g.fillStyle = bg;
+          const a0 = g.globalAlpha;
+          g.globalAlpha = a0 * (holding ? 0.75 : 0.45);
+          g.fillStyle = this.colorOf('hold');
           roundRect(g, bx, top, bw, bottom - top, 10);
           g.fill();
-          g.strokeStyle = holding ? 'rgba(235,220,255,0.9)' : 'rgba(200,170,255,0.45)';
-          g.lineWidth = 1.5;
-          g.stroke();
-          // Flowing light inside the body.
-          g.fillStyle = holding ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.4)';
+          g.globalAlpha = a0;
+          g.fillStyle = holding ? '#ffffff' : 'rgba(255,255,255,0.45)';
           g.fillRect(x + w / 2 - 1.5, top + 6, 3, Math.max(0, bottom - top - 12));
-          if (holding) {
-            g.globalCompositeOperation = 'lighter';
-            for (let k = 0; k < 3; k++) {
-              const yy = bottom - ((now * 260 + k * 90) % Math.max(60, bottom - top));
-              if (yy > top) g.drawImage(glow('#d9c6ff'), x + w / 2 - bw * 0.6, yy - 12, bw * 1.2, 24);
-            }
-            g.globalCompositeOperation = 'source-over';
-          }
           if (n.state !== 1) this.drawTile(g, x, yHead - tileH, w, tileH, n, now);
           g.globalAlpha = 1;
           continue;
@@ -876,59 +874,42 @@
           pairs.set(n.t, arr);
         }
       }
-      // Doubles are joined by a light bar so they read as one gesture.
+      // Doubles are joined by a white bar so they read as one gesture.
+      g.fillStyle = 'rgba(255,255,255,0.8)';
       for (const arr of pairs.values()) {
         if (arr.length < 2) continue;
-        g.globalCompositeOperation = 'lighter';
-        g.globalAlpha = 0.7;
-        const y = arr[0].y - 6;
-        g.drawImage(glow('#ffffff'), Math.min(arr[0].x, arr[1].x), y - 8, Math.abs(arr[1].x - arr[0].x), 16);
-        g.globalAlpha = 1;
-        g.globalCompositeOperation = 'source-over';
+        g.fillRect(Math.min(arr[0].x, arr[1].x), arr[0].y - 8, Math.abs(arr[1].x - arr[0].x), 3);
       }
     }
 
+    // A tile is one flat colour for its type, with a white timing edge at the bottom.
     drawTile(g, x, y, w, h, n, now) {
       const missed = n.state === 2;
-      const colors = n.type === 'flick' ? ((this.skin && this.skin.flick) || NOTE_COLORS.flick) : (this.skin ? this.skin.lanes[n.lane] : LANE_COLORS[n.lane]);
-      if (!missed) {
-        g.globalCompositeOperation = 'lighter';
-        const a = g.globalAlpha;
-        g.globalAlpha = a * 0.4;
-        g.drawImage(glow(colors[1]), x - w * 0.3, y - h * 0.3, w * 1.6, h * 1.6);
-        g.globalAlpha = a;
-        g.globalCompositeOperation = 'source-over';
-      }
-      const grd = g.createLinearGradient(0, y, 0, y + h);
+      const r = Math.min(12, h / 3);
       if (missed) {
-        const a = Math.max(0.12, 1 - (now - n.missAt) * 2.2);
-        grd.addColorStop(0, 'rgba(255,92,122,' + (0.35 * a) + ')');
-        grd.addColorStop(1, 'rgba(255,92,122,' + a + ')');
-      } else {
-        grd.addColorStop(0, colors[1]);
-        grd.addColorStop(1, colors[0]);
+        const a0 = g.globalAlpha;
+        g.globalAlpha = a0 * Math.max(0.12, 1 - (now - n.missAt) * 2.2);
+        g.fillStyle = NOTE_COLORS.miss;
+        roundRect(g, x, y, w, h, r);
+        g.fill();
+        g.globalAlpha = a0;
+        return;
       }
-      g.fillStyle = grd;
-      roundRect(g, x, y, w, h, Math.min(12, h / 3));
+      g.fillStyle = this.colorOf(n.type);
+      roundRect(g, x, y, w, h, r);
       g.fill();
-      if (missed) return;
-      // Gloss + bright timing edge.
-      g.fillStyle = 'rgba(255,255,255,0.16)';
-      roundRect(g, x + 3, y + 3, w - 6, h * 0.38, Math.min(9, h / 4));
-      g.fill();
-      g.fillStyle = 'rgba(255,255,255,0.95)';
-      roundRect(g, x + 4, y + h - 5, w - 8, 3, 1.5);
-      g.fill();
+      g.fillStyle = '#ffffff';
+      g.fillRect(x + 5, y + h - 5, w - 10, 3);
       if (n.pair) {
-        g.strokeStyle = 'rgba(255,255,255,0.9)';
+        g.strokeStyle = '#ffffff';
         g.lineWidth = 2.5;
-        roundRect(g, x + 1.5, y + 1.5, w - 3, h - 3, Math.min(11, h / 3));
+        roundRect(g, x + 1.5, y + 1.5, w - 3, h - 3, r - 1);
         g.stroke();
       }
       if (n.type === 'flick') {
-        const s = Math.min(w, h) * 0.22;
-        chevron(g, x + w / 2, y + h * 0.42, s, 'rgba(255,255,255,0.95)');
-        chevron(g, x + w / 2, y + h * 0.42 + s * 0.9, s * 0.8, 'rgba(255,255,255,0.55)');
+        const sz = Math.min(w, h) * 0.22;
+        chevron(g, x + w / 2, y + h * 0.42, sz, '#ffffff');
+        chevron(g, x + w / 2, y + h * 0.42 + sz * 0.9, sz * 0.8, 'rgba(255,255,255,0.6)');
       }
     }
   }
@@ -948,12 +929,53 @@
       this.skyW = this.floorW * 1.08;
       this.skyBound = this.y1 - this.skyH * 0.42; // touches above this are sky / arc touches
       this.hudCx = W / 2;
-      const g = this.g;
-      this.bgGrad = g.createLinearGradient(0, 0, 0, H);
-      this.bgGrad.addColorStop(0, 'hsl(' + this.hue + ',' + this.satp(55) + '%,5%)');
-      this.bgGrad.addColorStop(0.28, 'hsl(' + (this.hue + 15) + ',' + this.satp(60) + '%,16%)');
-      this.bgGrad.addColorStop(0.36, 'hsl(' + (this.hue + 30) + ',' + this.satp(55) + '%,9%)');
-      this.bgGrad.addColorStop(1, 'hsl(' + (this.hue + 40) + ',' + this.satp(55) + '%,4%)');
+      // Static sky (colour wash, horizon glow, stars) drawn once per resize.
+      const dpr = this.dpr || 1;
+      const c = document.createElement('canvas');
+      c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+      const g = c.getContext('2d');
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const bg = g.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, 'hsl(' + this.hue + ',' + this.satp(55) + '%,5%)');
+      bg.addColorStop(0.28, 'hsl(' + (this.hue + 15) + ',' + this.satp(60) + '%,16%)');
+      bg.addColorStop(0.36, 'hsl(' + (this.hue + 30) + ',' + this.satp(55) + '%,9%)');
+      bg.addColorStop(1, 'hsl(' + (this.hue + 40) + ',' + this.satp(55) + '%,4%)');
+      g.fillStyle = bg;
+      g.fillRect(0, 0, W, H);
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = 0.5;
+      g.fillStyle = '#e6ecff';
+      for (const st of this.stars) g.fillRect(st.x * W, st.y * H * 0.34, st.r, st.r);
+      g.globalAlpha = 0.45;
+      g.drawImage(glow(hslHex(this.hue + 20, this.satp(90), 60)), this.cx - W * 0.7, this.y0 - H * 0.2, W * 1.4, H * 0.55);
+      g.globalAlpha = 0.3;
+      g.drawImage(glow('#ff6fb5'), this.cx - W * 0.1, this.y0 - H * 0.08, W * 0.55, H * 0.3);
+      g.drawImage(glow('#4de1ff'), this.cx - W * 0.45, this.y0 - H * 0.08, W * 0.55, H * 0.3);
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+      const zFar = 1.05, zNear = -0.18;
+      const fX = (u, z) => this.cx + (u - 0.5) * this.floorW * this.s(z), fY = (z) => this.floorY(z);
+      g.beginPath();
+      g.moveTo(fX(0, zFar), fY(zFar));
+      g.lineTo(fX(1, zFar), fY(zFar));
+      g.lineTo(fX(1, zNear), fY(zNear));
+      g.lineTo(fX(0, zNear), fY(zNear));
+      g.closePath();
+      const tg = g.createLinearGradient(0, fY(zFar), 0, H);
+      tg.addColorStop(0, 'rgba(20,24,48,0.35)');
+      tg.addColorStop(1, 'rgba(12,14,30,0.92)');
+      g.fillStyle = tg;
+      g.fill();
+      for (let l = 0; l <= 4; l++) {
+        const edge = l === 0 || l === 4;
+        g.strokeStyle = edge ? 'rgba(210,222,255,0.55)' : 'rgba(170,190,255,0.12)';
+        g.lineWidth = edge ? 2 : 1;
+        g.beginPath();
+        g.moveTo(fX(l / 4, zFar), fY(zFar));
+        g.lineTo(fX(l / 4, zNear), fY(zNear));
+        g.stroke();
+      }
+      this.backdrop = c;
     }
 
     s(z) { return 1 / (1 + this.K * Math.max(z, -0.18)); }
@@ -1028,7 +1050,7 @@
             a.missFlash = now;
           }
         }
-        if (on && Math.random() < 0.7) this.fx.spark(sx, this.skyY(0), ARC_COLORS[a.color], 7 * this.unit, 18 * this.unit);
+        if (on && Math.random() < 0.35) this.fx.spark(sx, this.skyY(0), ARC_COLORS[a.color], 7 * this.unit, 18 * this.unit);
       }
     }
 
@@ -1038,22 +1060,13 @@
       const pulse = this.beatPulse(now);
       const energy = this.energyAt(now);
 
-      // Sky and horizon.
-      g.fillStyle = this.bgGrad;
-      g.fillRect(0, 0, W, H);
-      g.globalCompositeOperation = 'lighter';
-      for (const s of this.stars) {
-        g.globalAlpha = 0.2 + 0.4 * Math.abs(Math.sin(s.tw + now * 1.3));
-        g.fillStyle = '#e6ecff';
-        g.fillRect(s.x * W, s.y * H * 0.34, s.r, s.r);
+      // Sky and horizon (cached), plus a light beat pulse on the horizon.
+      g.drawImage(this.backdrop, 0, 0, W, H);
+      if (pulse > 0.05) {
+        g.fillStyle = 'rgba(160,200,255,' + (0.08 * pulse) + ')';
+        g.fillRect(0, this.y0, W, H * 0.12);
       }
-      g.globalAlpha = 0.35 + 0.25 * energy + 0.2 * pulse;
-      g.drawImage(glow(hslHex(this.hue + 20, this.satp(90), 60)), this.cx - W * 0.7, this.y0 - H * 0.2, W * 1.4, H * 0.55);
-      g.globalAlpha = 0.25 + 0.15 * pulse;
-      g.drawImage(glow('#ff6fb5'), this.cx - W * 0.1, this.y0 - H * 0.08, W * 0.55, H * 0.3);
-      g.drawImage(glow('#4de1ff'), this.cx - W * 0.45, this.y0 - H * 0.08, W * 0.55, H * 0.3);
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
+      void energy;
 
       this.drawFloor(now, dNow, pulse);
       this.drawFloorNotes(now, dNow);
@@ -1076,30 +1089,9 @@
 
     drawFloor(now, dNow, pulse) {
       const g = this.g, H = this.H;
-      const zFar = 1.05, zNear = -0.18;
-      // Track surface.
-      g.beginPath();
-      g.moveTo(this.floorX(0, zFar), this.floorY(zFar));
-      g.lineTo(this.floorX(1, zFar), this.floorY(zFar));
-      g.lineTo(this.floorX(1, zNear), this.floorY(zNear));
-      g.lineTo(this.floorX(0, zNear), this.floorY(zNear));
-      g.closePath();
-      const tg = g.createLinearGradient(0, this.floorY(zFar), 0, H);
-      tg.addColorStop(0, 'rgba(20,24,48,0.35)');
-      tg.addColorStop(1, 'rgba(12,14,30,0.92)');
-      g.fillStyle = tg;
-      g.fill();
-      // Lane lines and glowing rails.
-      for (let l = 0; l <= 4; l++) {
-        const u = l / 4;
-        const edge = l === 0 || l === 4;
-        g.strokeStyle = edge ? 'rgba(210,222,255,0.55)' : 'rgba(170,190,255,0.12)';
-        g.lineWidth = edge ? 2 : 1;
-        g.beginPath();
-        g.moveTo(this.floorX(u, zFar), this.floorY(zFar));
-        g.lineTo(this.floorX(u, zNear), this.floorY(zNear));
-        g.stroke();
-      }
+      const zFar = 1.05;
+      void H;
+      // Track surface and lane lines come from the cached backdrop.
       // Bar lines flowing toward the player.
       for (let b = Math.max(0, PTUtil.lowerBound(this.bars, now - 0.5)); b < this.bars.length; b++) {
         const z = this.S.at(this.bars[b]) - dNow;
@@ -1126,22 +1118,14 @@
         g.lineTo(this.floorX((l + 1) / 4, z1), this.floorY(z1));
         g.lineTo(this.floorX(l / 4, z1), this.floorY(z1));
         g.closePath();
-        const lg = g.createLinearGradient(0, this.y1, 0, this.floorY(z1));
-        lg.addColorStop(0, 'rgba(120,225,255,' + a + ')');
-        lg.addColorStop(1, 'rgba(120,225,255,0)');
-        g.fillStyle = lg;
+        g.fillStyle = 'rgba(120,225,255,' + (a * 0.6) + ')';
         g.fill();
       }
       // Judgment line.
       const x0 = this.floorX(0, 0), x1 = this.floorX(1, 0);
-      g.globalCompositeOperation = 'lighter';
-      g.globalAlpha = 0.3 + 0.35 * pulse;
-      g.drawImage(glow('#9fd8ff'), x0 - 30, this.y1 - 30, x1 - x0 + 60, 60);
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
-      const jg = g.createLinearGradient(x0, 0, x1, 0);
-      jg.addColorStop(0, '#4de1ff'); jg.addColorStop(0.5, '#ffffff'); jg.addColorStop(1, '#ff6fb5');
-      g.fillStyle = jg;
+      g.fillStyle = 'rgba(94,240,255,' + (0.12 + 0.2 * pulse) + ')';
+      g.fillRect(x0, this.y1 - 7, x1 - x0, 14);
+      g.fillStyle = '#e8f7ff';
       g.fillRect(x0, this.y1 - 2, x1 - x0, 4);
     }
 
@@ -1182,14 +1166,11 @@
           g.globalAlpha = fade * (n.hold === 3 || missed ? 0.3 : 1);
           const inset = (uR - uL) * 0.18;
           this.quad(uL + inset, uR - inset, Math.max(-0.18, zHead), zTail);
-          const hg = g.createLinearGradient(0, this.floorY(zTail), 0, this.floorY(zHead));
-          hg.addColorStop(0, 'rgba(122,69,255,0.15)');
-          hg.addColorStop(1, holding ? 'rgba(190,160,255,0.9)' : 'rgba(122,69,255,0.65)');
-          g.fillStyle = hg;
+          const a0 = g.globalAlpha;
+          g.globalAlpha = a0 * (holding ? 0.75 : 0.45);
+          g.fillStyle = this.colorOf('hold');
           g.fill();
-          g.strokeStyle = holding ? 'rgba(240,228,255,0.9)' : 'rgba(200,170,255,0.5)';
-          g.lineWidth = 1.2;
-          g.stroke();
+          g.globalAlpha = a0;
           if (n.state !== 1) this.drawSlab(n, z, uL, uR, missed, now);
           g.globalAlpha = 1;
           continue;
@@ -1200,44 +1181,34 @@
       }
     }
 
+    // A floor note: one flat colour for its type, with a white timing edge.
     drawSlab(n, z, uL, uR, missed, now) {
       const g = this.g;
-      const colors = n.pair ? NOTE_COLORS.pair
-        : n.type === 'flick' ? ((this.skin && this.skin.flick) || NOTE_COLORS.flick)
-        : n.type === 'hold' ? NOTE_COLORS.hold
-        : (this.skin ? this.skin.lanes[1] : NOTE_COLORS.tap);
       const dz = 0.05;
       const s = this.s(z);
-      if (!missed) {
-        const cx = this.floorX((uL + uR) / 2, z), cy = this.floorY(z);
-        const w = (uR - uL) * this.floorW * s;
-        g.globalCompositeOperation = 'lighter';
-        const a = g.globalAlpha;
-        g.globalAlpha = a * 0.45;
-        g.drawImage(glow(colors[1]), cx - w * 0.8, cy - w * 0.35, w * 1.6, w * 0.7);
-        g.globalAlpha = a;
-        g.globalCompositeOperation = 'source-over';
-      }
       this.quad(uL, uR, z, z + dz);
       const top = this.floorY(z + dz), bot = this.floorY(z);
-      const sg = g.createLinearGradient(0, top, 0, bot);
       if (missed) {
-        const a = Math.max(0.12, 1 - (now - n.missAt) * 2.2);
-        sg.addColorStop(0, 'rgba(255,92,122,' + (0.4 * a) + ')');
-        sg.addColorStop(1, 'rgba(255,92,122,' + a + ')');
-      } else {
-        sg.addColorStop(0, colors[1]);
-        sg.addColorStop(1, colors[0]);
+        const a0 = g.globalAlpha;
+        g.globalAlpha = a0 * Math.max(0.12, 1 - (now - n.missAt) * 2.2);
+        g.fillStyle = NOTE_COLORS.miss;
+        g.fill();
+        g.globalAlpha = a0;
+        return;
       }
-      g.fillStyle = sg;
+      g.fillStyle = this.colorOf(n.type);
       g.fill();
-      if (missed) return;
-      g.fillStyle = 'rgba(255,255,255,0.9)';
+      if (n.pair) {
+        g.strokeStyle = '#ffffff';
+        g.lineWidth = Math.max(1, 2 * s);
+        g.stroke();
+      }
+      g.fillStyle = '#ffffff';
       g.fillRect(this.floorX(uL, z) + 2, bot - Math.max(1.5, 3 * s), this.floorX(uR, z) - this.floorX(uL, z) - 4, Math.max(1.5, 3 * s));
       if (n.type === 'flick') {
         const cx = this.floorX((uL + uR) / 2, z);
         const size = (uR - uL) * this.floorW * s * 0.2;
-        chevron(g, cx, top - size * 1.1, size, 'rgba(255,230,200,0.95)');
+        chevron(g, cx, top - size * 1.1, size, '#ffffff');
       }
     }
 
@@ -1282,12 +1253,7 @@
         left.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
         for (let i = right.length - 1; i >= 0; i--) g.lineTo(right[i][0], right[i][1]);
         g.closePath();
-        const farY = pts[pts.length - 1].y, nearY = pts[0].y;
-        const rg = g.createLinearGradient(0, farY, 0, nearY);
-        const base = missed ? '#ff5c7a' : color;
-        rg.addColorStop(0, rgba(base, 0.12));
-        rg.addColorStop(1, rgba(base, a.tracked ? 0.85 : 0.6));
-        g.fillStyle = rg;
+        g.fillStyle = rgba(missed ? NOTE_COLORS.miss : color, a.tracked ? 0.8 : 0.55);
         g.fill();
         g.strokeStyle = 'rgba(255,255,255,' + (a.tracked ? 0.9 : 0.55) + ')';
         g.lineWidth = 1.5;
@@ -1336,15 +1302,7 @@
         g.beginPath();
         g.ellipse(fxp, this.floorY(z), w * 0.5, Math.max(1.5, h * 0.3), 0, 0, Math.PI * 2);
         g.fill();
-        if (!missed) {
-          g.globalCompositeOperation = 'lighter';
-          g.drawImage(glow('#ffd166'), x - w, y - h * 2, w * 2, h * 4);
-          g.globalCompositeOperation = 'source-over';
-        }
-        const sg = g.createLinearGradient(0, y - h / 2, 0, y + h / 2);
-        sg.addColorStop(0, missed ? '#ff9fb0' : '#ffffff');
-        sg.addColorStop(1, missed ? '#ff5c7a' : '#ffc34d');
-        g.fillStyle = sg;
+        g.fillStyle = missed ? NOTE_COLORS.miss : NOTE_COLORS.sky;
         roundRect(g, x - w / 2, y - h / 2, w, h, h / 2);
         g.fill();
         g.globalAlpha = 1;
