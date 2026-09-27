@@ -3,13 +3,14 @@
  * answered from the cache immediately and refreshed in the background, so an update shows up on
  * the next launch. Bump VERSION when shipping changes to force a clean cache.
  */
-const VERSION = 'heather-music-hub-v4';
+const VERSION = 'heather-music-hub-v5';
 const SHELL = [
   './',
   'index.html',
   'css/style.css',
   'js/util.js',
   'js/progress.js',
+  'js/cloud.js',
   'js/analyzer.js',
   'js/chart.js',
   'js/audio.js',

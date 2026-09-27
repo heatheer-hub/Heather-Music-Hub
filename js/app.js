@@ -60,6 +60,7 @@
       const song = await loadBytes(bytes, { fileName: file.name, size: file.size });
       const id = await saveToDevice(bytes, { fileName: file.name });
       if (id && state.song === song) song.libId = id;
+      syncCloud();
     } catch (err) {
       showLoadError(err);
     }
@@ -579,7 +580,8 @@
     const tags = U.readId3(bytes);
     const rec = {
       id, file: meta.fileName, size: bytes.length, added: Date.now(),
-      title: meta.title || tags.title || meta.fileName.replace(/\.[^.]+$/, ''), artist: meta.artist || tags.artist || ''
+      title: meta.title || tags.title || meta.fileName.replace(/\.[^.]+$/, ''), artist: meta.artist || tags.artist || '',
+      cloudPath: meta.cloudPath || null
     };
     try {
       const d = await db();
@@ -619,6 +621,7 @@
       if (await saveToDevice(bytes, { fileName: f.name })) added++;
     }
     setStatus(added ? 'Added ' + added + (added === 1 ? ' song' : ' songs') + ' to My Songs.' : 'Those songs are already in My Songs.');
+    syncCloud();
   }
 
   // A song pack (made by tools/build_library.py) carries every song of the Songs folder in one file:
@@ -639,12 +642,13 @@
         if (await saveToDevice(bytes, { fileName: s.file, title: s.title, artist: s.artist })) added++;
       }
       setStatus(added ? 'Imported ' + added + (added === 1 ? ' song' : ' songs') + ' into My Songs.' : 'Every song in this pack is already in My Songs.');
+      syncCloud();
     } catch (err) {
       showLoadError(err);
     }
   }
 
-  function allSongs() { return PACKED.concat(deviceSongs); }
+  function allSongs() { return PACKED.concat(deviceSongs, cloudOnly()); }
 
   function loadBundle(entry) {
     if (bundleLoads.has(entry.id)) return bundleLoads.get(entry.id);
@@ -675,6 +679,11 @@
   }
 
   async function loadEntryBytes(entry) {
+    if (entry.source === 'cloud') {
+      const bytes = await PTCloud.download(entry.cloudPath);
+      await saveToDevice(bytes, { fileName: entry.file, title: entry.title, cloudPath: entry.cloudPath });
+      return bytes;
+    }
     if (entry.source === 'device') {
       const d = await db();
       const buf = await idbReq(d.transaction('audio').objectStore('audio').get(entry.id));
@@ -711,6 +720,7 @@
 
 
   function renderLibrary() {
+    if (typeof renderCloud === 'function' && PTCloud.config()) renderCloud();
     const songs = allSongs();
     $('library').classList.toggle('hidden', !songs.length);
     const dz = $('dropzone');
@@ -731,7 +741,8 @@
       row.dataset.id = entry.id;
       const hue = 180 + (parseInt(entry.id.replace(/[^0-9a-f]/g, '').slice(0, 4) || '0', 16) % 150);
       const sub = [entry.artist];
-      if (sum) sub.push(U.formatTime(sum.duration), Math.round(sum.bpm) + ' BPM');
+      if (entry.source === 'cloud') sub.push('In the cloud', U.formatBytes(entry.size), 'tap to download');
+      else if (sum) sub.push(U.formatTime(sum.duration), Math.round(sum.bpm) + ' BPM');
       else sub.push(U.formatBytes(entry.size));
       const best = sum ? bestForHash(sum.hash) : null;
       let side = '';
@@ -739,7 +750,7 @@
       else if (best) side = '<span class="lib-grade">' + best.grade + '</span><span class="lib-diff">' + best.diff + '</span>';
       else if (ready) side = '<span class="lib-ready">Ready</span>';
       row.innerHTML =
-        '<span class="lib-art" style="--h:' + hue + '"></span>' +
+        '<span class="lib-art' + (entry.source === 'cloud' ? ' cloud' : '') + '" style="--h:' + hue + '"></span>' +
         '<span class="lib-main"><span class="lib-title">' + esc(entry.title) + '</span>' +
         '<span class="lib-sub">' + esc(sub.filter(Boolean).join(' · ')) + (busy === 'analyzing' ? ' · analyzing…' : '') + '</span></span>' +
         '<span class="lib-side">' + side + '</span>';
@@ -787,7 +798,9 @@
     setStatus('Loading ' + entry.title + '…');
     try {
       const bytes = await loadEntryBytes(entry);
-      const song = await loadBytes(bytes, { fileName: entry.file, size: entry.size, title: entry.title, artist: entry.artist, libId: entry.id });
+      // A cloud song becomes a saved song once downloaded: keep its summary under the saved id.
+      const libId = entry.source === 'cloud' ? deviceId(U.hashBytes(bytes), bytes.length) : entry.id;
+      const song = await loadBytes(bytes, { fileName: entry.file, size: entry.size, title: entry.title, artist: entry.artist, libId });
       state.part = part || 'full';
       libBusy.delete(entry.id);
       renderLibrary();
@@ -824,7 +837,7 @@
           const buffer = await decodeBytes(bytes);
           const A = await getAnalysis(hash, buffer, null);
           libBusy.delete(entry.id);
-          saveLibSummary(entry.id, hash, A);
+          saveLibSummary(entry.source === 'cloud' ? deviceId(hash, bytes.length) : entry.id, hash, A);
         }
       } catch (err) {
         console.warn('Background analysis failed for', entry.file, err);
@@ -834,11 +847,172 @@
     }
   }
 
+  // ---------- cloud library (private GitHub repository, see js/cloud.js) ----------
+  let cloudFiles = [];                       // songs in the cloud: { name, path, size, sha }
+  const cloud = { busy: false, msg: '', error: '', syncedAt: 0, confirmDisconnect: false };
+
+  function cloudMatch(f, s) {
+    return (s.cloudPath && s.cloudPath === f.path) || (s.size === f.size && PTCloud.cleanName(s.file) === f.name);
+  }
+  // Cloud songs this device has not downloaded yet.
+  function cloudOnly() {
+    if (!PTCloud.config()) return [];
+    return cloudFiles
+      .filter(f => !deviceSongs.some(s => cloudMatch(f, s)) && !PACKED.some(s => cloudMatch(f, s)))
+      .map(f => ({
+        source: 'cloud', id: 'c' + U.hashBytes(new TextEncoder().encode(f.path)).toString(16),
+        file: f.name, title: f.name.replace(/\.[^.]+$/, ''), artist: '', size: f.size, cloudPath: f.path
+      }));
+  }
+
+  async function setCloudPath(song, path) {
+    song.cloudPath = path;
+    try {
+      const d = await db();
+      const t = d.transaction('meta', 'readwrite');
+      const rec = Object.assign({}, song);
+      delete rec.source;
+      t.objectStore('meta').put(rec);
+      await idbDone(t);
+    } catch (e) { /* the file-name match still finds it next time */ }
+  }
+
+  function setCloudMsg(msg) { cloud.msg = msg; renderCloud(); }
+
+  // List the cloud, then upload every song on this device that is not there yet.
+  async function syncCloud() {
+    if (!PTCloud.config() || cloud.busy) return;
+    cloud.busy = true;
+    cloud.error = '';
+    try {
+      setCloudMsg('Checking the cloud…');
+      cloudFiles = await PTCloud.list();
+      renderLibrary();
+      const todo = deviceSongs.concat(PACKED).filter(s => !cloudFiles.some(f => cloudMatch(f, s)));
+      for (let i = 0; i < todo.length; i++) {
+        const s = todo[i];
+        setCloudMsg('Uploading ' + s.title + ' (' + (i + 1) + ' of ' + todo.length + ')…');
+        const bytes = await loadEntryBytes(s);
+        const up = await PTCloud.upload(s.file, bytes);
+        if (!cloudFiles.some(f => f.path === up.path)) cloudFiles.push({ name: up.path.split('/').pop(), path: up.path, size: bytes.length, sha: up.sha });
+        if (s.source === 'device') await setCloudPath(s, up.path);
+      }
+      cloud.syncedAt = Date.now();
+      cloud.msg = '';
+    } catch (e) {
+      cloud.error = e.message || String(e);
+      cloud.msg = '';
+    } finally {
+      cloud.busy = false;
+      renderCloud();
+      renderLibrary();
+    }
+  }
+
+  async function downloadAllCloud() {
+    const list = cloudOnly();
+    if (!list.length || cloud.busy) return;
+    cloud.busy = true;
+    cloud.error = '';
+    try {
+      for (let i = 0; i < list.length; i++) {
+        setCloudMsg('Downloading ' + list[i].title + ' (' + (i + 1) + ' of ' + list.length + ')…');
+        await loadEntryBytes(list[i]);
+      }
+      cloud.msg = '';
+    } catch (e) {
+      cloud.error = e.message || String(e);
+      cloud.msg = '';
+    } finally {
+      cloud.busy = false;
+      renderCloud();
+      renderLibrary();
+    }
+  }
+
+  function renderCloud() {
+    const card = $('cloud-card');
+    const cfg = PTCloud.config();
+    if (!cfg) {
+      card.innerHTML =
+        '<div class="cloud-head"><span class="cloud-icon" aria-hidden="true"></span><div class="cloud-text">' +
+        '<b>Cloud library</b><span>Keep your songs online, so songs you add on your computer also show up on your phone.</span></div></div>' +
+        '<div class="btn-row"><button class="btn small primary" data-cloud="setup">Set up</button></div>';
+      return;
+    }
+    const pending = cloudOnly().length;
+    const line = cloud.msg || (cloudFiles.length + (cloudFiles.length === 1 ? ' song' : ' songs') + ' online' +
+      (pending ? ' · ' + pending + ' not on this device yet' : ' · all on this device') +
+      (cloud.syncedAt ? ' · synced ' + new Date(cloud.syncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''));
+    card.innerHTML =
+      '<div class="cloud-head"><span class="cloud-icon on" aria-hidden="true"></span><div class="cloud-text">' +
+      '<b>Cloud library</b><span>' + esc(cfg.repo) + '</span><span class="cloud-line">' + esc(line) + '</span></div>' +
+      (cloud.busy ? '<span class="lib-spin" aria-label="syncing"></span>' : '') + '</div>' +
+      (cloud.error ? '<p class="status error cloud-error">' + esc(cloud.error) + '</p>' : '') +
+      '<div class="btn-row">' +
+      '<button class="btn small" data-cloud="sync"' + (cloud.busy ? ' disabled' : '') + '>Sync now</button>' +
+      (pending ? '<button class="btn small primary" data-cloud="download"' + (cloud.busy ? ' disabled' : '') + '>Download all (' + pending + ')</button>' : '') +
+      '<button class="btn small ghost" data-cloud="disconnect">' + (cloud.confirmDisconnect ? 'Tap again to disconnect' : 'Disconnect') + '</button>' +
+      '</div>';
+  }
+
+  function openCloudDialog() {
+    const cfg = PTCloud.config();
+    $('cloud-repo').value = cfg ? cfg.repo : ($('cloud-repo').value || '');
+    $('cloud-token').value = '';
+    $('cloud-dialog-status').textContent = '';
+    $('cloud-dialog').classList.remove('hidden');
+  }
+
+  async function connectCloud() {
+    const btn = $('btn-cloud-connect');
+    btn.disabled = true;
+    $('cloud-dialog-status').classList.remove('error');
+    $('cloud-dialog-status').textContent = 'Connecting…';
+    try {
+      await PTCloud.connect($('cloud-repo').value, $('cloud-token').value);
+      $('cloud-token').value = '';
+      $('cloud-dialog').classList.add('hidden');
+      renderCloud();
+      syncCloud();
+    } catch (e) {
+      $('cloud-dialog-status').classList.add('error');
+      $('cloud-dialog-status').textContent = e.message || String(e);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function onCloudCard(e) {
+    const b = e.target.closest('[data-cloud]');
+    if (!b) return;
+    const action = b.dataset.cloud;
+    if (action === 'setup') openCloudDialog();
+    else if (action === 'sync') syncCloud();
+    else if (action === 'download') downloadAllCloud();
+    else if (action === 'disconnect') {
+      if (!cloud.confirmDisconnect) {
+        cloud.confirmDisconnect = true;
+        renderCloud();
+        setTimeout(() => { cloud.confirmDisconnect = false; renderCloud(); }, 3000);
+        return;
+      }
+      cloud.confirmDisconnect = false;
+      PTCloud.disconnect();
+      cloudFiles = [];
+      cloud.error = '';
+      renderCloud();
+      renderLibrary();
+    }
+  }
+
   async function initLibrary() {
     if (window.BeatTilesLibrary) window.BeatTilesLibrary.receive = receiveBundle;
     renderLibrary();
     await loadDeviceSongs();
     renderLibrary();
+    renderCloud();
+    await syncCloud();
     const phone = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
     if (!phone && allSongs().length) setTimeout(preanalyzeLibrary, 600);
   }
@@ -1031,6 +1205,13 @@
     $('btn-regen').addEventListener('click', openDifficulty);
     $('btn-newsong').addEventListener('click', () => { input.value = ''; show('screen-home'); });
     initLibrary();
+    $('cloud-card').addEventListener('click', onCloudCard);
+    $('btn-cloud-connect').addEventListener('click', connectCloud);
+    $('btn-cloud-cancel').addEventListener('click', () => $('cloud-dialog').classList.add('hidden'));
+    // Coming back to the app (e.g. reopening it on the phone) checks the cloud for new songs.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !state.game && Date.now() - cloud.syncedAt > 30000) syncCloud();
+    });
     $('pack-input').addEventListener('change', (e) => { importPack(e.target.files && e.target.files[0]); e.target.value = ''; });
     $('part-picker').addEventListener('click', (e) => {
       const b = e.target.closest('[data-part]');

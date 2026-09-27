@@ -92,6 +92,36 @@ so add them from inside the installed app. To remove a song, tap × and then **R
 After changing the code, push to GitHub and bump `VERSION` in `sw.js`; the phone picks up the
 update the next time the app is opened.
 
+### Cloud library (songs shared between computer and phone)
+
+The website itself never contains songs. The songs live in a **second, private** GitHub
+repository that only you can open (`js/cloud.js`). Set it up once from the **Cloud library** card
+on the Play tab:
+
+1. Create a private repository for the songs, e.g. `heather-music-hub-songs` (github.com/new →
+   *Private*).
+2. Create a fine-grained access token (github.com → Settings → Developer settings →
+   Fine-grained tokens). Set *Repository access* to *Only select repositories* and pick the songs
+   repository. Under *Repository permissions*, set *Contents* to *Read and write*. Keep a copy of
+   the token (password manager, Notes) so you can paste it on the phone too.
+3. On each device, open the app → **Cloud library → Set up**. Enter `your-username/heather-music-hub-songs`
+   and the token, then tap **Connect**.
+
+After that:
+
+- Songs you add on any device (**Add songs** or **Import song pack**) upload automatically into
+  the repository's `songs/` folder.
+- Every connected device lists them. Tap one to download it, or tap **Download all**; downloaded
+  songs play offline.
+- The app checks for new songs each time you open it, and **Sync now** checks right away.
+- Removing a song with × only removes it from that device, so it stays in the cloud. To delete it
+  everywhere, delete the file from the repository on github.com.
+- The app refuses to connect to a public repository.
+- The token is stored only in that browser and sent only to api.github.com. It can only touch the
+  songs repository.
+- Best scores, coins and unlocks still stay per device. Use Records → Save backup / Restore backup
+  to move them.
+
 ### My Songs (the `Songs` folder)
 
 Put audio files (MP3, M4A, WAV, …) in `Songs/`, then run:
