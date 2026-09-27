@@ -552,5 +552,59 @@
     return s;
   }
 
-  global.PTChart = { generate, DIFFICULTIES, LANES };
+  // Where the first chorus ends. The chorus is taken to be the loudest section type that repeats;
+  // the split is the end of its first appearance, snapped to a bar line. Falls back to the
+  // section boundary nearest the middle when that lands too close to either end.
+  function splitPoint(A) {
+    const secs = A.sections, dur = A.duration;
+    const bars = [];
+    for (let i = A.downbeatPhase; i < A.beats.length; i += 4) bars.push(A.beats[i]);
+    const snap = (t) => {
+      let best = t, bd = Infinity;
+      for (const b of bars) if (Math.abs(b - t) < bd) { bd = Math.abs(b - t); best = b; }
+      return bd < 2.5 ? best : t;
+    };
+    const ok = (t) => t >= dur * 0.2 && t <= dur * 0.8;
+    const byLabel = {};
+    secs.forEach((s, i) => {
+      const o = byLabel[s.label] || (byLabel[s.label] = { count: 0, energy: 0, length: 0, first: i });
+      o.count++; o.energy += s.energy; o.length += s.end - s.start;
+    });
+    let chorus = null, bestScore = -Infinity;
+    for (const [label, o] of Object.entries(byLabel)) {
+      if (o.count < 2) continue;
+      // Loud, repeated and long: choruses usually win on all three.
+      const score = o.energy / o.count + 0.08 * o.count + 0.002 * o.length;
+      if (score > bestScore) { bestScore = score; chorus = label; }
+    }
+    if (!chorus) {
+      let top = -1;
+      secs.forEach(s => { if (s.energy > top) { top = s.energy; chorus = s.label; } });
+    }
+    // End of the first run of chorus sections; if that is too early, try later appearances.
+    for (let i = 0; i < secs.length; i++) {
+      if (secs[i].label !== chorus) continue;
+      let j = i;
+      while (j + 1 < secs.length && secs[j + 1].label === chorus) j++;
+      const t = snap(secs[j].end);
+      if (ok(t)) return t;
+      if (t > dur * 0.8) break;
+      i = j;
+    }
+    let best = dur / 2, bd = Infinity;
+    for (let i = 1; i < secs.length; i++) {
+      const d = Math.abs(secs[i].start - dur * 0.45);
+      if (d < bd && ok(secs[i].start)) { bd = d; best = secs[i].start; }
+    }
+    return snap(best);
+  }
+
+  // A chart limited to [start, end): notes and arcs fully inside the range, stats recomputed.
+  function slice(chart, start, end) {
+    const notes = chart.notes.filter(n => n.t >= start && n.t + n.dur <= end - 0.05).map((n, i) => Object.assign({}, n, { id: i }));
+    const arcs = chart.arcs.filter(a => a.t0 >= start && a.t1 <= end).map((a, i) => Object.assign({}, a, { id: i }));
+    return Object.assign({}, chart, { notes, arcs, stats: stats(notes, arcs), range: { start, end } });
+  }
+
+  global.PTChart = { generate, slice, splitPoint, DIFFICULTIES, LANES };
 })(typeof self !== 'undefined' ? self : this);

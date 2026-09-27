@@ -1,6 +1,6 @@
 {
-  "name": "BeatTiles",
-  "short_name": "BeatTiles",
+  "name": "Heather Music Hub",
+  "short_name": "Heather Music Hub",
   "description": "Turn your songs into playable piano-tiles charts.",
   "start_url": "./",
   "scope": "./",

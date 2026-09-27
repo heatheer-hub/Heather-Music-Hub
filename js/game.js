@@ -220,17 +220,20 @@
       for (const a of this.arcs) endT = Math.max(endT, a.t1);
       this.endTime = this.notes.length ? endT + 1.4 : this.analysis.duration;
       const first = Math.min(this.notes.length ? this.notes[0].t : 0, this.arcs.length ? this.arcs[0].t0 : Infinity);
-      this.leadIn = Math.max(1.5, this.chart.travel + 1.2 - first);
+      // Playback range: the whole song, or one part of it (chart.range). Music starts a little
+      // before the range so the first notes have time to arrive.
+      this.rangeStart = this.chart.range ? this.chart.range.start : 0;
+      this.playFrom = Math.min(this.rangeStart - 1.5, first - this.chart.travel - 1.2);
       this.lastPerf = performance.now();
     }
 
-    start() { this.player.play(-this.leadIn); this.running = true; this.loop(); }
+    start() { this.player.play(this.playFrom); this.running = true; this.loop(); }
 
     restart() {
       this.player.stop();
       this.reset();
       this.onPauseChange(false);
-      this.player.play(-this.leadIn);
+      this.player.play(this.playFrom);
       if (!this.running) { this.running = true; this.loop(); }
     }
 
@@ -249,7 +252,7 @@
       if (!this.paused) return;
       this.paused = false;
       this.resumeTarget = this.pausedAt;
-      this.player.play(Math.max(-this.leadIn, this.pausedAt - 2.5));
+      this.player.play(Math.max(this.playFrom, this.pausedAt - 2.5));
       this.onPauseChange(false);
     }
 
@@ -554,7 +557,8 @@
       const g = this.g, W = this.W, H = this.H, s = this.stats, u = this.unit;
       const cx = this.hudCx != null ? this.hudCx : W / 2;
       // Progress bar with section ticks.
-      const prog = Math.max(0, Math.min(1, now / Math.max(1, this.endTime)));
+      const span = Math.max(1, this.endTime - this.rangeStart);
+      const prog = Math.max(0, Math.min(1, (now - this.rangeStart) / span));
       g.fillStyle = 'rgba(255,255,255,0.08)';
       g.fillRect(0, 0, W, 4);
       const pg = g.createLinearGradient(0, 0, W, 0);
@@ -562,7 +566,9 @@
       g.fillStyle = pg;
       g.fillRect(0, 0, W * prog, 4);
       g.fillStyle = 'rgba(255,255,255,0.35)';
-      for (const sec of this.analysis.sections) g.fillRect(Math.round(W * sec.start / this.endTime), 0, 1, 4);
+      for (const sec of this.analysis.sections) {
+        if (sec.start > this.rangeStart && sec.start < this.endTime) g.fillRect(Math.round(W * (sec.start - this.rangeStart) / span), 0, 1, 4);
+      }
 
       // Score + accuracy.
       const pad = 16;
@@ -672,7 +678,7 @@
       }
       // Lead-in / resume countdown.
       let countdown = null;
-      if (now < 0) countdown = Math.ceil(-now);
+      if (now < this.rangeStart) countdown = Math.ceil(this.rangeStart - now);
       else if (this.resumeTarget != null) {
         if (now < this.resumeTarget) countdown = Math.ceil(this.resumeTarget - now);
         else this.resumeTarget = null;
@@ -683,7 +689,7 @@
         g.fillText(String(Math.min(countdown, 9)), cx, H * 0.46);
         g.fillStyle = 'rgba(232,235,245,0.5)';
         g.font = '700 ' + Math.round(11 + 1.5 * u) + 'px ' + FONT;
-        g.fillText(now < 0 ? 'GET READY' : 'RESUMING', cx, H * 0.46 + H * 0.065);
+        g.fillText(now < this.rangeStart ? 'GET READY' : 'RESUMING', cx, H * 0.46 + H * 0.065);
       }
     }
   }

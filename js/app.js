@@ -110,6 +110,7 @@
     state.analysis = null;
     state.charts = {};
     state.variation = 1;
+    state.part = 'full';
     const b = song.buffer;
     $('song-title').textContent = song.title;
     $('song-artist').textContent = song.artist || song.fileName;
@@ -304,10 +305,27 @@
   }
 
   // ---------- 3. difficulty ----------
+  // Each song splits at the end of its first chorus: Part 1 = start to there, Part 2 = the rest.
+  const PART_LABEL = { full: 'Full song', p1: 'Part 1', p2: 'Part 2' };
+  const PART_DESC = { full: 'The whole song', p1: 'Start to the end of the first chorus', p2: 'After the first chorus to the end' };
+  function partsFor(A) {
+    if (A.split == null) A.split = PTChart.splitPoint(A);
+    return [
+      { id: 'full', start: 0, end: A.duration },
+      { id: 'p1', start: 0, end: A.split },
+      { id: 'p2', start: A.split, end: A.duration }
+    ];
+  }
+  function sliceForPart(chart) {
+    if (!state.part || state.part === 'full') return chart;
+    const p = partsFor(state.analysis).find(x => x.id === state.part);
+    return PTChart.slice(chart, p.start, p.end);
+  }
+
   function chartFor(diff) {
-    const key = diff + ':' + state.variation;
+    const key = diff + ':' + state.variation + ':' + (state.part || 'full');
     if (!state.charts[key]) {
-      state.charts[key] = PTChart.generate(state.analysis, diff, { seed: state.song.hash, variation: state.variation, speedMod: 1 });
+      state.charts[key] = sliceForPart(PTChart.generate(state.analysis, diff, { seed: state.song.hash, variation: state.variation, speedMod: 1 }));
     }
     return state.charts[key];
   }
@@ -316,6 +334,11 @@
   function renderDifficulty() {
     $('diff-status').textContent = '';
     $('diff-song').textContent = state.song.title;
+    const parts = partsFor(state.analysis);
+    $('part-picker').innerHTML = parts.map(p =>
+      '<button role="radio" data-part="' + p.id + '" aria-checked="' + (state.part === p.id) + '"><b>' + PART_LABEL[p.id] + '</b>' +
+      '<span>' + U.formatTime(p.start) + '–' + U.formatTime(p.end) + '</span></button>').join('');
+    $('part-note').textContent = PART_DESC[state.part || 'full'] + '.';
     const list = $('diff-list');
     list.innerHTML = '';
     let lastMode = null;
@@ -330,7 +353,7 @@
           '<span><b>' + MODES[D.mode].label + '</b><span>' + MODES[D.mode].sub + '</span></span>';
         list.appendChild(head);
       }
-      const best = PTProgress.getRecord(state.song.hash, k, state.variation);
+      const best = PTProgress.getRecord(state.song.hash, k, state.variation, state.part);
       const btn = document.createElement('button');
       btn.className = 'diff';
       btn.setAttribute('role', 'radio');
@@ -370,7 +393,7 @@
     const resumeP = ctx.state !== 'running' ? ctx.resume() : null; // inside the tap gesture
     const diff = settings.difficulty;
     const D = PTChart.DIFFICULTIES[diff];
-    const chart = PTChart.generate(state.analysis, diff, { seed: state.song.hash, variation: state.variation, speedMod: settings.speedMod });
+    const chart = sliceForPart(PTChart.generate(state.analysis, diff, { seed: state.song.hash, variation: state.variation, speedMod: settings.speedMod }));
     if (!chart.notes.length) {
       $('diff-status').textContent = 'No playable notes were found in this song on ' + PTChart.DIFFICULTIES[diff].name + '. Try another difficulty.';
       return;
@@ -442,10 +465,10 @@
     if (state.game) { state.game.destroy(); state.game = null; }
     const rw = PTProgress.recordPlay({
       hash: state.song.hash, title: state.song.title, diff, mode: D.mode,
-      variation: state.variation, level: chart.stats.level, result: r
+      variation: state.variation, part: state.part, level: chart.stats.level, result: r
     });
     state.lastRewards = rw;
-    const rec = PTProgress.getRecord(state.song.hash, diff, state.variation);
+    const rec = PTProgress.getRecord(state.song.hash, diff, state.variation, state.part);
 
     $('r-grade').textContent = rw.grade;
     $('r-grade').className = 'grade g-' + rw.grade;
@@ -454,7 +477,7 @@
     $('r-clear').className = 'clear-banner ' + rw.clear;
     $('r-gauge').textContent = 'Clear gauge ' + Math.floor(r.gauge) + '%' + (rw.clear === 'fail' ? ' (70% needed to clear)' : '');
     $('r-song').textContent = state.song.title;
-    $('r-diff').textContent = diffLabel(diff) + ' · Lv ' + chart.stats.level.toFixed(1) + (state.variation > 1 ? ' · variation ' + state.variation : '') +
+    $('r-diff').textContent = (state.part !== 'full' ? PART_LABEL[state.part] + ' · ' : '') + diffLabel(diff) + ' · Lv ' + chart.stats.level.toFixed(1) + (state.variation > 1 ? ' · variation ' + state.variation : '') +
       ' · ' + r.notes + ' notes' + (r.arcs ? ' · ' + r.arcs + ' arcs' : '');
     $('r-score').textContent = U.formatScore(r.score);
     $('r-acc').textContent = r.accuracy.toFixed(2) + '%';
@@ -556,7 +579,7 @@
     const tags = U.readId3(bytes);
     const rec = {
       id, file: meta.fileName, size: bytes.length, added: Date.now(),
-      title: tags.title || meta.fileName.replace(/\.[^.]+$/, ''), artist: tags.artist || ''
+      title: meta.title || tags.title || meta.fileName.replace(/\.[^.]+$/, ''), artist: meta.artist || tags.artist || ''
     };
     try {
       const d = await db();
@@ -596,6 +619,29 @@
       if (await saveToDevice(bytes, { fileName: f.name })) added++;
     }
     setStatus(added ? 'Added ' + added + (added === 1 ? ' song' : ' songs') + ' to My Songs.' : 'Those songs are already in My Songs.');
+  }
+
+  // A song pack (made by tools/build_library.py) carries every song of the Songs folder in one file:
+  // "HMHPACK1" + header length (uint32 LE) + JSON header + the audio files back to back.
+  async function importPack(file) {
+    if (!file) return;
+    setStatus('Opening ' + file.name + '…');
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      if (buf.length < 12 || new TextDecoder().decode(buf.subarray(0, 8)) !== 'HMHPACK1') throw new Error('This is not a Heather Music Hub song pack.');
+      const hlen = new DataView(buf.buffer, buf.byteOffset + 8, 4).getUint32(0, true);
+      const header = JSON.parse(new TextDecoder().decode(buf.subarray(12, 12 + hlen)));
+      const base = 12 + hlen;
+      let added = 0;
+      for (const s of header.songs) {
+        setStatus('Adding ' + s.title + '…');
+        const bytes = buf.slice(base + s.offset, base + s.offset + s.size);
+        if (await saveToDevice(bytes, { fileName: s.file, title: s.title, artist: s.artist })) added++;
+      }
+      setStatus(added ? 'Imported ' + added + (added === 1 ? ' song' : ' songs') + ' into My Songs.' : 'Every song in this pack is already in My Songs.');
+    } catch (err) {
+      showLoadError(err);
+    }
   }
 
   function allSongs() { return PACKED.concat(deviceSongs); }
@@ -646,13 +692,20 @@
   }
 
   function saveLibSummary(id, hash, A) {
-    U.store.set('bt:lib:' + id, { hash, duration: A.duration, bpm: A.bpm, key: A.key, sections: A.sections.length });
+    U.store.set('bt:lib:' + id, { hash, duration: A.duration, bpm: A.bpm, key: A.key, sections: A.sections.length, split: PTChart.splitPoint(A) });
     renderLibrary();
   }
 
-  function bestForHash(hash) {
+  function bestFor(hash, part) {
     let best = null;
-    for (const r of Object.values(PTProgress.load().records)) if (r.hash === hash && (!best || r.score > best.score)) best = r;
+    for (const r of Object.values(PTProgress.load().records)) {
+      if (r.hash === hash && (r.part || 'full') === part && (!best || r.score > best.score)) best = r;
+    }
+    return best;
+  }
+
+  function bestForHash(hash) {
+    const best = bestFor(hash, 'full');
     return best && PTChart.DIFFICULTIES[best.diff] ? { grade: best.grade, diff: MODES[best.mode].short + ' · ' + PTChart.DIFFICULTIES[best.diff].name } : null;
   }
 
@@ -690,7 +743,7 @@
         '<span class="lib-main"><span class="lib-title">' + esc(entry.title) + '</span>' +
         '<span class="lib-sub">' + esc(sub.filter(Boolean).join(' · ')) + (busy === 'analyzing' ? ' · analyzing…' : '') + '</span></span>' +
         '<span class="lib-side">' + side + '</span>';
-      row.addEventListener('click', () => openLibrarySong(entry));
+      row.addEventListener('click', () => openLibrarySong(entry, 'full'));
       item.appendChild(row);
       if (entry.source === 'device') {
         const rm = document.createElement('button');
@@ -707,10 +760,24 @@
         item.appendChild(rm);
       }
       list.appendChild(item);
+      // Part 1 / Part 2 sit under their song.
+      const split = sum && sum.split;
+      for (const pid of ['p1', 'p2']) {
+        const sub = document.createElement('button');
+        sub.className = 'lib-part';
+        const range = split ? (pid === 'p1' ? '0:00–' + U.formatTime(split) : U.formatTime(split) + '–' + U.formatTime(sum.duration)) : '';
+        const pb = sum ? bestFor(sum.hash, pid) : null;
+        sub.innerHTML = '<span class="lib-part-dot" aria-hidden="true"></span>' +
+          '<span class="lib-part-main"><span class="lib-part-name">' + PART_LABEL[pid] + '</span>' +
+          '<span class="lib-part-sub">' + PART_DESC[pid] + (range ? ' · ' + range : '') + '</span></span>' +
+          (pb ? '<span class="lib-grade small">' + pb.grade + '</span>' : '');
+        sub.addEventListener('click', () => openLibrarySong(entry, pid));
+        list.appendChild(sub);
+      }
     });
   }
 
-  async function openLibrarySong(entry) {
+  async function openLibrarySong(entry, part) {
     if (state.analyzing || libBusy.get(entry.id) === 'loading') return;
     // Unlock audio inside the tap so playback can start later without another gesture.
     const ctx = PTAudio.getContext();
@@ -721,6 +788,7 @@
     try {
       const bytes = await loadEntryBytes(entry);
       const song = await loadBytes(bytes, { fileName: entry.file, size: entry.size, title: entry.title, artist: entry.artist, libId: entry.id });
+      state.part = part || 'full';
       libBusy.delete(entry.id);
       renderLibrary();
       if (analysisCache.has(song.hash)) {
@@ -820,27 +888,29 @@
     const songs = new Map();
     for (const r of Object.values(p.records)) {
       let s = songs.get(r.hash);
-      if (!s) songs.set(r.hash, s = { title: r.title, last: 0, charts: {} });
+      if (!s) songs.set(r.hash, s = { title: r.title, last: 0, parts: {} });
       s.last = Math.max(s.last, r.lastPlayed || 0);
-      const cur = s.charts[r.diff];
-      if (!cur || r.score > cur.score || PTProgress.CLEAR_RANK[r.clear] > PTProgress.CLEAR_RANK[cur.clear]) s.charts[r.diff] = r;
+      const charts = s.parts[r.part || 'full'] || (s.parts[r.part || 'full'] = {});
+      const cur = charts[r.diff];
+      if (!cur || r.score > cur.score || PTProgress.CLEAR_RANK[r.clear] > PTProgress.CLEAR_RANK[cur.clear]) charts[r.diff] = r;
     }
     const list = [...songs.values()].sort((a, b) => b.last - a.last);
     $('records-list').innerHTML = list.length ? list.map(s =>
-      '<div class="card rec-song"><div class="rec-title">' + esc(s.title) + '</div><div class="rec-grid">' +
+      '<div class="card rec-song"><div class="rec-title">' + esc(s.title) + '</div>' +
+      ['full', 'p1', 'p2'].filter(pid => s.parts[pid]).map(pid => '<div class="rec-part">' + PART_LABEL[pid] + '</div><div class="rec-grid">' +
       DIFF_KEYS.map(k => {
-        const r = s.charts[k];
+        const r = s.parts[pid][k];
         if (!r) return '<div class="rec-cell empty"><span class="rec-diff">' + DIFF_SHORT[k] + '</span><span class="rec-score">not played</span></div>';
         return '<div class="rec-cell"><span class="rec-diff">' + DIFF_SHORT[k] + '</span>' +
           '<span class="rec-line"><b class="g g-' + r.grade + '">' + r.grade + '</b>' +
           (CLEAR_BADGE[r.clear] ? '<span class="rec-badge ' + r.clear + '">' + CLEAR_BADGE[r.clear] + '</span>' : '') + '</span>' +
           '<span class="rec-score">' + U.formatScore(r.score) + ' · ' + r.plays + (r.plays === 1 ? ' play' : ' plays') + '</span></div>';
-      }).join('') + '</div></div>').join('')
+      }).join('') + '</div>').join('') + '</div>').join('')
       : '<div class="card empty-note">No plays yet. Finish a chart and your best scores show up here.</div>';
 
     $('history-list').innerHTML = p.history.length ? p.history.slice(0, 12).map(h =>
       '<div class="hist-row"><div class="hist-main"><span class="hist-title">' + esc(h.title) + '</span>' +
-      '<span class="hist-sub">' + (DIFF_SHORT[h.diff] || h.diff) + ' · ' + timeAgo(h.at) + '</span></div>' +
+      '<span class="hist-sub">' + (h.part && h.part !== 'full' ? PART_LABEL[h.part] + ' · ' : '') + (DIFF_SHORT[h.diff] || h.diff) + ' · ' + timeAgo(h.at) + '</span></div>' +
       '<div class="hist-side"><b class="g g-' + h.grade + '">' + h.grade + '</b><span>' + U.formatScore(h.score) + '</span>' +
       (h.clear === 'fail' ? '<span class="rec-badge fail">LOST</span>' : '') + '</div></div>').join('')
       : '<p class="fine">Your last 12 plays appear here.</p>';
@@ -895,7 +965,7 @@
       const blob = new Blob([PTProgress.exportData()], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'beattiles-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.download = 'heather-music-hub-backup-' + new Date().toISOString().slice(0, 10) + '.json';
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -961,6 +1031,13 @@
     $('btn-regen').addEventListener('click', openDifficulty);
     $('btn-newsong').addEventListener('click', () => { input.value = ''; show('screen-home'); });
     initLibrary();
+    $('pack-input').addEventListener('change', (e) => { importPack(e.target.files && e.target.files[0]); e.target.value = ''; });
+    $('part-picker').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-part]');
+      if (!b) return;
+      state.part = b.dataset.part;
+      renderDifficulty();
+    });
     $('tabbar').querySelectorAll('button').forEach(b => b.addEventListener('click', () => show(b.dataset.screen)));
     document.querySelectorAll('.segmented [data-guide]').forEach(b => b.addEventListener('click', () => setGuide(b.dataset.guide)));
     setGuide(settings.guide || (isTouch() ? 'phone' : 'pc'));

@@ -1,4 +1,4 @@
-# BeatTiles
+# Heather Music Hub
 
 **MP3 → automatic music analysis → generated Piano Tiles chart → playable rhythm game.**
 
@@ -78,10 +78,14 @@ on the phone your songs are stored inside the app.
    "Deploy from a branch", branch `main`, folder `/ (root)` → Save. After a minute the app is
    at `https://<your-username>.github.io/<repository-name>/`.
 3. **Install:** open that address in Safari on the iPhone → Share → **Add to Home Screen**.
-4. **Add your songs:** put the MP3s where the Files app can see them (iCloud Drive via
-   icloud.com, OneDrive, Google Drive, or save email attachments to Files). Open BeatTiles from
-   the home screen → **Add songs** → tap *Select*, choose them all → *Open*. They stay in the app,
-   and it works offline from then on.
+4. **Add your songs:** copy `Songs/Heather Music Hub songs.hmhpack` (made by the build script
+   below) to iCloud Drive, e.g. by uploading it at icloud.com. On the phone, open Heather Music
+   Hub from the home screen → **Import song pack** → pick the file. All songs land in My Songs
+   with their titles, stay in the app, and play offline. You can also add single files with
+   **Add songs**.
+
+The songs never go to GitHub: the Pages site is public, and `.gitignore` keeps the `Songs`
+folder (including the pack) out of the repository.
 
 Songs added in Safari don't appear in the home-screen app (iOS keeps their storage separate),
 so add them from inside the installed app. To remove a song, tap × and then **Remove**.
@@ -96,7 +100,8 @@ Put audio files (MP3, M4A, WAV, …) in `Songs/`, then run:
 py tools/build_library.py
 ```
 
-This packs each song into `Songs/library/` and writes `Songs/library.js`. The home screen then
+This packs each song into `Songs/library/`, writes `Songs/library.js`, and builds the phone
+song pack `Songs/Heather Music Hub songs.hmhpack` (every song in one file). The home screen then
 lists them under **My Songs**. The page analyzes them in the background, one at a time, and
 pauses while you play. After that, tapping a song goes straight to difficulty selection.
 Rerun the script whenever you add, remove or replace songs. Titles come from the file's tags,
@@ -105,6 +110,21 @@ or from the filename when there are none.
 Why the packing step: a page opened by double-click can't read a folder or fetch local files,
 but it can load script files. Charts and best scores are identical to uploading the same file,
 because both paths hash the same bytes.
+
+### Song parts
+
+Every song also has **Part 1** and **Part 2** under it in My Songs, and a Full song / Part 1 /
+Part 2 switch on the chart screen:
+
+- **Part 1** runs from the start to the end of the first chorus.
+- **Part 2** runs from right after the first chorus to the end.
+
+The chorus is found automatically: it is the section type that is loudest, repeats, and runs
+longest. The split is the end of its first appearance, snapped to a bar line and kept between
+20% and 80% of the song.
+
+A part plays the same charts as the full song, trimmed to the part. The music starts a couple of
+seconds before the part with a count-in. Each part has its own best scores and records.
 
 No MP3 handy? The home screen has a "generated demo tune" button that synthesizes a song in
 the browser and runs it through the same pipeline.

@@ -7,11 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="BeatTiles">
+  <meta name="apple-mobile-web-app-title" content="Heather Music Hub">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <title>BeatTiles</title>
+  <title>Heather Music Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -24,7 +24,7 @@
     <section class="screen active" id="screen-home">
       <header class="brand">
         <div class="logo" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-        <h1>BeatTiles</h1>
+        <h1>Heather Music Hub</h1>
         <p class="tagline">Turn any MP3 into a playable piano-tiles chart.</p>
         <div class="home-chip" id="home-chip"></div>
       </header>
@@ -64,6 +64,7 @@
 
       <div class="home-foot">
         <p class="privacy">Your song is analyzed on this device and is never uploaded.</p>
+        <label class="btn small pack-btn">Import song pack<input type="file" id="pack-input" hidden></label>
         <button class="linklike" id="btn-demo">No MP3 handy? Try a generated demo tune</button>
       </div>
     </section>
@@ -114,6 +115,8 @@
         <div class="topbar-title" id="diff-song">—</div>
       </div>
 
+      <div class="segmented parts" id="part-picker" role="radiogroup" aria-label="Part of the song"></div>
+      <p class="fine part-note" id="part-note"></p>
       <div class="diff-list" id="diff-list" role="radiogroup" aria-label="Difficulty"></div>
 
       <div class="card settings">
@@ -241,7 +244,7 @@
       <div class="card guide">
         <h2>1. Add songs</h2>
         <div data-for="phone">
-          <p>Open BeatTiles from your Home Screen and tap <b>Add songs</b>. Pick MP3 or M4A files from the Files app (iCloud Drive, OneDrive, Google Drive or files saved from email). Tap <i>Select</i> to add several at once.</p>
+          <p>Open Heather Music Hub from your Home Screen and tap <b>Add songs</b>, or <b>Import song pack</b> to add every song from your computer's Songs folder at once. Pick MP3 or M4A files from the Files app (iCloud Drive, OneDrive, Google Drive or files saved from email). Tap <i>Select</i> to add several at once.</p>
           <p>Songs stay inside the app under <b>My Songs</b> and play offline. To remove one, tap <b>×</b> and then <b>Remove</b>.</p>
         </div>
         <div data-for="pc">

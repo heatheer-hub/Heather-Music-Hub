@@ -1,6 +1,6 @@
 /*
  * Player progress: records, rating, level, coins, achievements and unlockables.
- * Saved on this device (localStorage). Modeled on the reward loops of the games BeatTiles draws on:
+ * Saved on this device (localStorage). Modeled on the reward loops of the games Heather Music Hub draws on:
  *   - clear gauge + clear types (Arcaea: Track Complete / Full Recall / Pure Memory; Phigros FC / AP)
  *   - score grades and chart levels (Arcaea / Phigros difficulty constants)
  *   - rating from your best plays (Arcaea Potential, Phigros RKS)
@@ -133,8 +133,9 @@
     while (rest >= need) { rest -= need; level++; need = 100 + 40 * (level - 1); }
     return { level, into: rest, need };
   }
-  function recordKey(hash, diff, variation) { return hash + ':' + diff + ':' + (variation || 1); }
-  function getRecord(hash, diff, variation) { return load().records[recordKey(hash, diff, variation)] || null; }
+  // Parts of a song (part 1 / part 2) keep their own records next to the full song's.
+  function recordKey(hash, diff, variation, part) { return hash + ':' + diff + ':' + (variation || 1) + (part && part !== 'full' ? ':' + part : ''); }
+  function getRecord(hash, diff, variation, part) { return load().records[recordKey(hash, diff, variation, part)] || null; }
 
   // Store one finished play and hand out rewards. Returns everything the results screen shows.
   function recordPlay(play) {
@@ -143,7 +144,7 @@
     const clear = clearType(r);
     const ap = clear === 'ap';
     const g = grade(r.score, ap);
-    const key = recordKey(play.hash, play.diff, play.variation);
+    const key = recordKey(play.hash, play.diff, play.variation, play.part);
     const prev = p.records[key] || null;
     const ratingBefore = rating(p);
     const levelBefore = levelInfo(p.exp).level;
@@ -151,7 +152,7 @@
     const newBest = !prev || r.score > prev.score;
     const firsts = [];
 
-    const rec = prev ? Object.assign({}, prev) : { hash: play.hash, diff: play.diff, mode: play.mode, variation: play.variation || 1, score: 0, clear: 'fail', plays: 0 };
+    const rec = prev ? Object.assign({}, prev) : { hash: play.hash, diff: play.diff, mode: play.mode, variation: play.variation || 1, part: play.part || 'full', score: 0, clear: 'fail', plays: 0 };
     rec.title = play.title;
     rec.level = play.level;
     rec.plays++;
@@ -184,7 +185,7 @@
     const levelAfter = levelInfo(p.exp).level;
     if (levelAfter > levelBefore) bonuses.push({ label: 'Level up to ' + levelAfter, coins: 100 * (levelAfter - levelBefore) });
 
-    p.history.unshift({ at: Date.now(), title: play.title, diff: play.diff, mode: play.mode, score: r.score, grade: g, clear });
+    p.history.unshift({ at: Date.now(), title: play.title, diff: play.diff, mode: play.mode, part: play.part || 'full', score: r.score, grade: g, clear });
     p.history = p.history.slice(0, 30);
 
     // Achievements unlocked by this play.
@@ -241,10 +242,10 @@
   }
 
   // ---------- backup ----------
-  function exportData() { return JSON.stringify({ app: 'BeatTiles', version: 1, data: load() }); }
+  function exportData() { return JSON.stringify({ app: 'HeatherMusicHub', version: 1, data: load() }); }
   function importData(text) {
     const o = JSON.parse(text);
-    if (!o || o.app !== 'BeatTiles' || !o.data || typeof o.data.records !== 'object') throw new Error('This is not a BeatTiles backup file.');
+    if (!o || (o.app !== 'HeatherMusicHub' && o.app !== 'BeatTiles') || !o.data || typeof o.data.records !== 'object') throw new Error('This is not a Heather Music Hub backup file.');
     load(o.data);
     save();
     return true;

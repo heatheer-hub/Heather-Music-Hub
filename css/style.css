@@ -600,3 +600,21 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 
 /* Results scroll to their buttons instead of pinning them over the rewards. */
 #screen-results .bottom-actions { position: static; margin-top: 0; background: none; padding-top: 0; }
 .unlock em { font-style: normal; color: var(--good); font-weight: 700; margin-left: 4px; }
+
+/* ---------- rename + song parts ---------- */
+.brand h1 { font-size: clamp(30px, 9vw, 40px); text-wrap: balance; }
+.segmented.parts { grid-template-columns: repeat(3, 1fr); }
+.segmented.parts button { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 52px; font-size: 14px; }
+.segmented.parts button span { font-size: 11px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.segmented button[aria-checked="true"] { background: var(--card-2); color: var(--text); box-shadow: inset 0 0 0 1px rgba(77, 225, 255, 0.4); }
+.part-note { margin: -8px 0 0; }
+.lib-part { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 8px 6px 30px; border: 0; border-radius: 10px; background: none; text-align: left; cursor: pointer; }
+.lib-part:hover, .lib-part:focus-visible { background: var(--card-2); }
+.lib-part-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--violet); }
+.lib-part-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lib-part-name { font-size: 14px; font-weight: 700; }
+.lib-part-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-grade.small { font-size: 15px; }
+.rec-part { margin: 10px 0 6px; font-size: 12px; font-weight: 700; color: var(--violet); text-transform: uppercase; letter-spacing: 0.06em; }
+.rec-song .rec-part:first-of-type { margin-top: 0; }
+.pack-btn { cursor: pointer; }
