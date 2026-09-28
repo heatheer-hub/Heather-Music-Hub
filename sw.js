@@ -3,7 +3,7 @@
  * answered from the cache immediately and refreshed in the background, so an update shows up on
  * the next launch. Bump VERSION when shipping changes to force a clean cache.
  */
-const VERSION = 'heather-music-hub-v8';
+const VERSION = 'heather-music-hub-v9';
 const SHELL = [
   './',
   'index.html',

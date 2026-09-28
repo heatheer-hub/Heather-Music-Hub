@@ -38,8 +38,17 @@ turn back.
 | Arc | Cyan or pink ribbon in the air | Put a finger on the glowing ring where the ribbon meets the dashed line and slide along with it. Its sideways path follows the melody. Every half beat you stay on it scores. While an arc is running, floor notes come on the other side for your other hand. |
 | Sky note | Gold bar floating in the air | Tap it in the upper part of the screen when it reaches the dashed line. |
 
-Keyboard: `D F J K` (or arrow keys) play the lanes, `Space`/`Esc` pauses. In horizontal
-mode on a computer, use the mouse for arcs and sky notes.
+**Computer controls.** Choose one on the chart screen:
+
+- **Keyboard** (default): `D F J K` play the lanes. In horizontal mode, hold `Space` and press
+  the lane key under a sky note. For an arc, keep `Space` and the key under the arc held,
+  switching keys as it moves. While Space is held, a key still plays the floor if a floor note
+  is due in its lane. `Esc` or `P` pauses.
+- **Mouse + keys**: `S D F G` play the lanes with the left hand. The mouse is only for the sky:
+  a click hits the sky note nearest the cursor, and holding the button follows arcs. `Space`,
+  `Esc` or `P` pauses.
+
+The lane letters show faintly under the lanes. Arrow keys and `1`–`4` also work as lanes.
 
 **Scoring.** Tap, flick and sky notes count once, holds twice (the press and the release), and
 arcs once per half-beat tick. Perfect / Great / Good / Miss windows are ±45 / 90 / 135 ms.

@@ -151,6 +151,14 @@
           <p class="fine">Raise it if your hits are judged late (e.g. Bluetooth headphones), or let the sync test set it.</p>
           <button class="btn small" id="btn-calibrate">Test with taps</button>
         </div>
+        <div class="setting" id="controls-setting">
+          <div class="setting-head"><span>Computer controls</span></div>
+          <div class="segmented parts" id="controls-picker" role="radiogroup" aria-label="Computer controls">
+            <button role="radio" data-controls="keys"><b>Keyboard</b><span>D F J K · Space + key = sky</span></button>
+            <button role="radio" data-controls="mouse"><b>Mouse + keys</b><span>S D F G · mouse = sky</span></button>
+          </div>
+          <p class="fine">Keyboard: hold <b>Space</b> and press the lane key under a sky note, or hold them along an arc. Mouse + keys: your left hand plays the floor, the mouse clicks sky notes and follows arcs.</p>
+        </div>
         <div class="setting">
           <div class="setting-head"><span>Tap timing</span><output id="tapoffset-out">0 ms</output></div>
           <input type="range" id="tapoffset" min="-100" max="250" step="5" value="0">
@@ -285,7 +293,7 @@
         <h2>3. Note types</h2>
         <ul class="notes-legend">
           <li><svg viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="gT" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1fa8ff"/><stop offset="1" stop-color="#8af7ff"/></linearGradient></defs><rect x="8" y="10" width="24" height="20" rx="5" fill="url(#gT)"/><rect x="10" y="26" width="20" height="2" rx="1" fill="#fff"/></svg>
-            <div><b>Tap</b><span data-for="phone">Tap its lane when it touches the line.</span><span data-for="pc">Press its lane key (D F J K) when it touches the line.</span></div></li>
+            <div><b>Tap</b><span data-for="phone">Tap its lane when it touches the line.</span><span data-for="pc">Press its lane key when it touches the line (D F J K, or S D F G in Mouse + keys mode).</span></div></li>
           <li><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="14" y="3" width="12" height="26" rx="5" fill="#7a45ff" opacity=".55"/><rect x="8" y="24" width="24" height="12" rx="4" fill="#b58cff"/></svg>
             <div><b>Hold</b><span data-for="phone">Press when it arrives and keep your finger down until the tail ends.</span><span data-for="pc">Press the key and keep it down until the tail ends.</span></div></li>
           <li><svg viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="gF" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff4f9a"/><stop offset="1" stop-color="#ffd27a"/></linearGradient></defs><rect x="8" y="10" width="24" height="20" rx="5" fill="url(#gF)"/><path d="M14 22l6-6 6 6" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -293,9 +301,9 @@
           <li><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="12" width="15" height="16" rx="4" fill="#8af7ff" stroke="#fff" stroke-width="1.5"/><rect x="23" y="12" width="15" height="16" rx="4" fill="#ffb3e0" stroke="#fff" stroke-width="1.5"/><rect x="15" y="25" width="10" height="2" fill="#fff"/></svg>
             <div><b>Double</b><span>Two outlined tiles joined by light. Hit both together.</span></div></li>
           <li><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M6 34 C 10 20, 30 22, 34 6" fill="none" stroke="#4de1ff" stroke-width="6" stroke-linecap="round" opacity=".8"/><circle cx="6" cy="34" r="4" fill="none" stroke="#fff" stroke-width="2"/></svg>
-            <div><b>Arc</b> <em>Horizontal</em><span data-for="phone">Put a finger on the glowing ring and slide left and right with the ribbon until it ends. Your other thumb plays the floor.</span><span data-for="pc">Hold the mouse button on the glowing ring and drag along with the ribbon. Keep playing the floor with D F J K.</span></div></li>
+            <div><b>Arc</b> <em>Horizontal</em><span data-for="phone">Put a finger on the glowing ring and slide left and right with the ribbon until it ends. Your other thumb plays the floor.</span><span data-for="pc">Keyboard mode: hold Space and the lane key under the ribbon, switching keys as it moves. Mouse + keys mode: hold the mouse button on the glowing ring and drag along.</span></div></li>
           <li><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="8" y="16" width="24" height="8" rx="4" fill="#ffc34d"/><ellipse cx="20" cy="33" rx="9" ry="2" fill="#000" opacity=".35"/></svg>
-            <div><b>Sky note</b> <em>Horizontal</em><span data-for="phone">Tap the upper part of the screen under the gold bar as it reaches the faint line.</span><span data-for="pc">Click the gold bar as it reaches the faint line.</span></div></li>
+            <div><b>Sky note</b> <em>Horizontal</em><span data-for="phone">Tap the upper part of the screen under the gold bar as it reaches the faint line.</span><span data-for="pc">Keyboard mode: Space + the lane key under the gold bar. Mouse + keys mode: click it (anywhere near it counts).</span></div></li>
         </ul>
       </div>
 
@@ -307,8 +315,9 @@
           <p>Pause with the button in the top-left corner.</p>
         </div>
         <div data-for="pc">
-          <p><b>Keys:</b> <kbd>D</kbd> <kbd>F</kbd> <kbd>J</kbd> <kbd>K</kbd> (or the arrow keys) play the four lanes in both modes. <kbd>Space</kbd> or <kbd>Esc</kbd> pauses.</p>
-          <p><b>Mouse:</b> in Horizontal mode, arcs and sky notes need the mouse. Keep your left hand on the keys and your right hand on the mouse.</p>
+          <p>Pick your controls on the chart screen under <b>Computer controls</b>:</p>
+          <p><b>Keyboard</b> (both hands on the keys): <kbd>D</kbd> <kbd>F</kbd> <kbd>J</kbd> <kbd>K</kbd> play the four lanes. In Horizontal mode, hold <kbd>Space</kbd> and press the lane key under a sky note, or keep Space and the key under an arc held while it passes. Keys on the other side still play the floor. <kbd>Esc</kbd> pauses.</p>
+          <p><b>Mouse + keys</b> (left hand on keys, right hand on the mouse): <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> play the lanes. The mouse is only for the sky: click sky notes, hold the button to follow arcs. <kbd>Space</kbd> or <kbd>Esc</kbd> pauses.</p>
           <p>A touchscreen laptop works like a phone.</p>
         </div>
       </div>

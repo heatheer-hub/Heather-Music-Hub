@@ -13,7 +13,7 @@
   const isTouch = () => !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   const SECTION_COLORS = ['#4de1ff', '#8b5cff', '#ff6fb5', '#ffd166', '#58e6a0', '#6d8bff', '#ff9a5c'];
 
-  const settings = Object.assign({ speedMod: 1, offsetMs: 0, tapOffsetMs: 0, difficulty: 'vnormal' }, U.store.get('bt:settings', {}));
+  const settings = Object.assign({ speedMod: 1, offsetMs: 0, tapOffsetMs: 0, controls: 'keys', difficulty: 'vnormal' }, U.store.get('bt:settings', {}));
   if (!PTChart.DIFFICULTIES[settings.difficulty]) settings.difficulty = 'vnormal';
   const state = {
     song: null,       // { title, artist, hash, buffer, fileName, size }
@@ -378,6 +378,8 @@
     $('speed-out').textContent = Number(settings.speedMod).toFixed(2).replace(/0$/, '') + '×';
     $('offset').value = settings.offsetMs;
     $('offset-out').textContent = (settings.offsetMs > 0 ? '+' : '') + settings.offsetMs + ' ms';
+    $('controls-setting').classList.toggle('hidden', isTouch());
+    document.querySelectorAll('#controls-picker [data-controls]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.controls === settings.controls)));
     $('tapoffset').value = settings.tapOffsetMs;
     $('tapoffset-out').textContent = (settings.tapOffsetMs > 0 ? '+' : '') + settings.tapOffsetMs + ' ms';
     $('var-out').textContent = state.variation;
@@ -406,9 +408,11 @@
     state.player.userOffset = settings.offsetMs / 1000;
     show('screen-game');
     $('pause-overlay').classList.add('hidden');
+    const mouseMode = settings.controls === 'mouse';
     $('key-hint').textContent = D.mode === 'horizontal'
-      ? 'Floor: D F J K · Arcs and sky notes: mouse · Space to pause'
-      : 'Keys: D F J K · Space to pause';
+      ? (mouseMode ? 'Floor: S D F G · Sky notes and arcs: mouse · Space or Esc to pause'
+                   : 'Floor: D F J K · Sky notes and arcs: hold Space + lane key · Esc to pause')
+      : (mouseMode ? 'Keys: S D F G · Space or Esc to pause' : 'Keys: D F J K · Esc to pause');
     if (resumeP) { try { await resumeP; } catch (e) { /* ignore */ } }
     if (D.mode === 'horizontal' && !(await ensureLandscape())) { openDifficulty(); return; }
     const Game = D.mode === 'horizontal' ? PTGame.HorizontalGame : PTGame.VerticalGame;
@@ -422,6 +426,8 @@
       sat: look.theme.sat,
       skin: look.skin,
       tapOffset: settings.tapOffsetMs / 1000,
+      controls: settings.controls,
+      showKeys: !isTouch(),
       onEnd: (r) => showResults(r, chart),
       onPauseChange: (p) => $('pause-overlay').classList.toggle('hidden', !p),
       onResize: (game) => {
@@ -1320,6 +1326,13 @@
       if (!document.hidden && !state.game && Date.now() - cloud.syncedAt > 30000) syncCloud();
     });
     $('pack-input').addEventListener('change', (e) => { importPack(e.target.files && e.target.files[0]); e.target.value = ''; });
+    $('controls-picker').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-controls]');
+      if (!b) return;
+      settings.controls = b.dataset.controls;
+      saveSettings();
+      renderDifficulty();
+    });
     $('part-picker').addEventListener('click', (e) => {
       const b = e.target.closest('[data-part]');
       if (!b) return;

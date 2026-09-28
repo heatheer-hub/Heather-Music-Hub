@@ -31,11 +31,14 @@
   // One plain colour per note type (a skin can change them). Doubles are taps with a white outline.
   const NOTE_COLORS = { tap: '#35b6ff', hold: '#9b6bff', flick: '#ff8a3d', sky: '#ffd166', miss: '#ff5c7a' };
   const ARC_COLORS = ['#4de1ff', '#ff6fb5'];
-  const LANE_KEYS = {
-    KeyD: 0, KeyF: 1, KeyJ: 2, KeyK: 3,
-    ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3,
-    Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3
+  // Computer controls. "keys": D F J K lanes, Space + lane key for sky notes and arcs (3D).
+  // "mouse": S D F G lanes for the left hand, the mouse is the sky hand (3D).
+  const KEYMAPS = {
+    keys: { KeyD: 0, KeyF: 1, KeyJ: 2, KeyK: 3 },
+    mouse: { KeyS: 0, KeyD: 1, KeyF: 2, KeyG: 3 }
   };
+  const KEY_LABELS = { keys: ['D', 'F', 'J', 'K'], mouse: ['S', 'D', 'F', 'G'] };
+  const COMMON_KEYS = { ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3, Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 };
   let insetProbe = null; // measures the notch / rounded-corner insets
   const FONT = 'Outfit, system-ui, -apple-system, sans-serif';
 
@@ -160,6 +163,9 @@
       this.skin = opts.skin || null;                    // tile skin: { lanes: [[light, dark] x4], flick? }
       this.popups = [];                                 // judgment pop-ups at the hit position
       this.tapOffset = opts.tapOffset || 0;             // s; positive = you usually tap late
+      this.controls = opts.controls === 'mouse' ? 'mouse' : 'keys';
+      this.showKeys = !!opts.showKeys;                  // faint key letters under the lanes
+      this.spaceHeld = false;
       this.S = this.chart.speed;
       const A = this.analysis;
       this.beats = A.beats;
@@ -305,7 +311,7 @@
       const { x, y } = this.localXY(e);
       const t = this.tapTime(e);
       const id = 'p' + e.pointerId;
-      this.inputDown(id, x, y, t);
+      this.inputDown(id, x, y, t, e.pointerType === 'mouse');
     }
     onPointerMove(e) {
       const p = this.ptrs.get('p' + e.pointerId);
@@ -316,27 +322,49 @@
     onPointerUp(e) { this.inputUp('p' + e.pointerId, this.tapTime(e)); }
     tapTime(e) { return this.player.timeAtEvent(e) - this.tapOffset; }
     onKeyDown(e) {
-      if (e.code === 'Escape' || e.code === 'Space') {
+      const pauseKey = e.code === 'Escape' || e.code === 'KeyP' || (e.code === 'Space' && !this.spaceIsSky());
+      if (pauseKey) {
         e.preventDefault();
+        if (e.repeat) return;
         if (this.paused) this.resume(); else this.pause();
         return;
       }
-      const lane = LANE_KEYS[e.code];
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!e.repeat && !this.paused && !this.finished) this.setSpace(true, this.tapTime(e));
+        return;
+      }
+      const lane = this.keyLane(e.code);
       if (lane == null || e.repeat || this.paused || this.finished) return;
       e.preventDefault();
-      const id = 'k' + e.code;
-      this.ptrs.set(id, { key: true, lane, x: -1, y: -1, x0: -1, y0: -1 });
-      this.pressLane(id, lane, this.tapTime(e), true);
+      this.keyDown('k' + e.code, lane, this.tapTime(e));
     }
     onKeyUp(e) {
-      if (LANE_KEYS[e.code] == null) return;
+      if (e.code === 'Space') { if (this.spaceIsSky()) this.setSpace(false); return; }
+      if (this.keyLane(e.code) == null) return;
       this.inputUp('k' + e.code, this.tapTime(e));
     }
+    keyLane(code) {
+      const m = KEYMAPS[this.controls];
+      return code in m ? m[code] : COMMON_KEYS[code];
+    }
+    // Public so tests can press keys without real events.
+    keyDown(id, lane, t) {
+      const p = { key: true, lane, keyLane: lane, x: -1, y: -1, x0: -1, y0: -1, at: t, sky: false, hitFloor: false };
+      this.ptrs.set(id, p);
+      if (this.spaceHeld && this.keySky(id, p, lane, t)) return;
+      const before = this.laneIdx[lane];
+      this.pressLane(id, lane, t, true);
+      p.hitFloor = this.laneIdx[lane] !== before;
+    }
+    spaceIsSky() { return false; }
+    setSpace(on) { this.spaceHeld = on; }
+    keySky() { return false; }
 
     // Public so tests / bots can drive the game without real events.
-    inputDown(id, x, y, t) {
+    inputDown(id, x, y, t, isMouse) {
       if (this.paused || this.finished) return;
-      const p = { x, y, x0: x, y0: y, t0: t, lane: -1 };
+      const p = { x, y, x0: x, y0: y, t0: t, lane: -1, mouse: !!isMouse };
       this.ptrs.set(id, p);
       this.handleDown(id, p, t);
     }
@@ -483,6 +511,16 @@
     }
 
     satp(v) { return Math.round(Math.min(100, v * this.sat)); }
+
+    drawKeyLabels(xs, y) {
+      if (!this.showKeys) return;
+      const g = this.g;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.font = '700 ' + Math.round(12 + 2 * this.unit) + 'px ' + FONT;
+      g.fillStyle = 'rgba(232,235,245,0.32)';
+      KEY_LABELS[this.controls].forEach((k, i) => g.fillText(k, xs[i], y));
+    }
 
     drawPopups() {
       const g = this.g, u = this.unit, perf = performance.now();
@@ -845,6 +883,7 @@
       g.fillStyle = '#e8f7ff';
       g.fillRect(fx, hitY - 1.5, fw, 3);
 
+      this.drawKeyLabels([0, 1, 2, 3].map(l => fx + (l + 0.5) * lw), hitY + 36);
       this.fx.draw(g);
       this.drawHud(now, H * 0.3, H * 0.2);
     }
@@ -1020,26 +1059,72 @@
       return { x: this.floorX((n.lane + 0.5) / 4, 0), y: this.y1 };
     }
 
+    // Earliest pending sky note in the timing window that `fits` the input; true if one was taken.
+    trySky(t, fits) {
+      for (let k = this.skyIdx; k < this.skyQ.length; k++) {
+        const n = this.notes[this.skyQ[k]];
+        const dt = t - n.t;
+        if (dt < -W_EARLY_MISS) break;
+        if (n.state !== 0 || dt > W_GOOD) continue;
+        if (!fits(n)) continue;
+        if (dt < -W_GOOD) { this.missNote(n, t); return true; }
+        this.hitNote(n, this.judgeOf(dt), t, dt);
+        return true;
+      }
+      return false;
+    }
+    skyLane(n) { return Math.max(0, Math.min(3, Math.floor(n.x * 4))); }
+    arcNear(x, t) {
+      const tol = this.skyW * 0.28;
+      return this.arcs.some(a => t >= a.t0 - 0.3 && t <= a.t1 && Math.abs(this.skyX(this.arcX(a, Math.max(t, a.t0)), 0) - x) <= tol);
+    }
+
+    // Keyboard mode: Space works like reaching up. Space + a lane key hits the sky note above that
+    // lane (or the next lane), or holds the arc passing over it. With nothing in the sky there,
+    // the key stays a floor tap, so the other hand can keep playing the floor during an arc.
+    spaceIsSky() { return this.controls === 'keys'; }
+    keySky(id, p, lane, t) {
+      p.x = this.skyX((lane + 0.5) / 4, 0);
+      p.y = this.skyY(0);
+      p.sky = true;
+      if (this.trySky(t, n => Math.abs(this.skyLane(n) - lane) <= 1)) { p.lane = -1; return true; }
+      // A floor note due in this lane right now wins: that key is the other hand playing the floor.
+      const q = this.laneQ[lane], fn = this.laneIdx[lane] < q.length ? this.notes[q[this.laneIdx[lane]]] : null;
+      const floorDue = fn && Math.abs(t - fn.t) <= W_GOOD;
+      if (!floorDue && this.arcNear(p.x, t)) { p.lane = -1; return true; }
+      p.sky = false;
+      return false;
+    }
+    setSpace(on, t) {
+      this.spaceHeld = on;
+      for (const [id, p] of this.ptrs) {
+        if (!p.key) continue;
+        if (!on) { p.sky = false; continue; }
+        // Lane key pressed a moment before Space: treat the pair as one sky press.
+        const kx = this.skyX((p.keyLane + 0.5) / 4, 0);
+        if (!p.hitFloor && t - p.at < 0.12) this.keySky(id, p, p.keyLane, p.at);
+        else if (this.arcNear(kx, t)) { p.x = kx; p.y = this.skyY(0); p.sky = true; }
+      }
+    }
+
     handleDown(id, p, t) {
+      // Mouse + keys mode: the mouse is the sky hand, so a click anywhere hits the sky note
+      // nearest the cursor (or starts tracing an arc).
+      if (p.mouse && this.controls === 'mouse') {
+        const tol = this.skyW * 0.2;
+        this.trySky(t, n => Math.abs(p.x - this.skyX(n.x, 0)) <= tol);
+        return;
+      }
       if (p.y < this.skyBound) {
         // Sky tap: nearest pending sky note in time and position. Otherwise it is an arc touch.
         const tol = this.skyW * 0.16;
-        for (let k = this.skyIdx; k < this.skyQ.length; k++) {
-          const n = this.notes[this.skyQ[k]];
-          const dt = t - n.t;
-          if (dt < -W_EARLY_MISS) break;
-          if (n.state !== 0 || dt > W_GOOD) continue;
-          if (Math.abs(p.x - this.skyX(n.x, 0)) > tol) continue;
-          if (dt < -W_GOOD) { this.missNote(n, t); return; }
-          this.hitNote(n, this.judgeOf(dt), t, dt);
-          return;
-        }
+        this.trySky(t, n => Math.abs(p.x - this.skyX(n.x, 0)) <= tol);
         return;
       }
       const lane = this.laneAt(p.x);
       if (lane >= 0) this.pressLane(id, lane, t, false);
     }
-    slideLane(p) { return p.y >= this.skyBound ? this.laneAt(p.x) : -1; }
+    slideLane(p) { return p.y >= this.skyBound && !(p.mouse && this.controls === 'mouse') ? this.laneAt(p.x) : -1; }
 
     updateMode(now) {
       while (this.skyIdx < this.skyQ.length) {
@@ -1056,7 +1141,10 @@
         if (a.tickIdx >= a.ticks.length) continue;
         const sx = this.skyX(this.arcX(a, Math.max(now, a.t0)), 0);
         let on = false;
-        for (const p of this.ptrs.values()) if (!p.key && Math.abs(p.x - sx) <= tol) { on = true; break; }
+        const keyTol = this.skyW * 0.28; // a held Space + lane key covers its lane and a bit more
+        for (const p of this.ptrs.values()) {
+          if (p.key ? p.sky && Math.abs(p.x - sx) <= keyTol : Math.abs(p.x - sx) <= tol) { on = true; break; }
+        }
         a.tracked = on;
         if (on) a.lastOnAt = now;
         while (a.tickIdx < a.ticks.length && a.ticks[a.tickIdx] + 0.08 <= now) {
@@ -1147,6 +1235,7 @@
       g.fillRect(x0, this.y1 - 7, x1 - x0, 14);
       g.fillStyle = '#e8f7ff';
       g.fillRect(x0, this.y1 - 2, x1 - x0, 4);
+      this.drawKeyLabels([0, 1, 2, 3].map(l => this.floorX((l + 0.5) / 4, 0)), Math.min(this.H - 12, this.y1 + 22));
     }
 
     // Floor slab between depths z and z + dz across lane-relative u range.
