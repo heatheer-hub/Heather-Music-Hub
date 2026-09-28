@@ -1,3 +1,5 @@
 # Your music stays on this computer: never commit or upload the Songs folder.
 Songs/
+# Theme pictures are other artists' illustrations: kept private, like the songs.
+Background/
 __pycache__/

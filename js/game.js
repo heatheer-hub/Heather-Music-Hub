@@ -64,6 +64,18 @@
     }
     return c;
   }
+  // Draw an image to fill W x H (like CSS background-size: cover), anchored at a focus point in %.
+  function drawCover(g, img, W, H, focal) {
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    if (!iw || !ih) return;
+    const k = Math.max(W / iw, H / ih), w = iw * k, h = ih * k;
+    const fx = (focal ? focal[0] : 50) / 100, fy = (focal ? focal[1] : 50) / 100;
+    g.drawImage(img, (W - w) * fx, (H - h) * fy, w, h);
+  }
+  function hexRgb(hex) {
+    const v = parseInt(String(hex).slice(1), 16);
+    return (v >> 16) + ',' + ((v >> 8) & 255) + ',' + (v & 255);
+  }
   function roundRect(g, x, y, w, h, r) {
     r = Math.max(0, Math.min(r, w / 2, h / 2));
     g.beginPath();
@@ -165,6 +177,11 @@
       this.tapOffset = opts.tapOffset || 0;             // s; positive = you usually tap late
       this.controls = opts.controls === 'mouse' ? 'mouse' : 'keys';
       this.showKeys = !!opts.showKeys;                  // faint key letters under the lanes
+      // Picture theme: { image, focal, game: { veil, field, line, accent, notes } } or null.
+      this.theme = opts.theme && opts.theme.game ? opts.theme : null;
+      this.font = opts.font || FONT;
+      this.accent = this.theme ? this.theme.game.accent : '#4de1ff';
+      this.accentRgb = hexRgb(this.accent);
       this.spaceHeld = false;
       this.S = this.chart.speed;
       const A = this.analysis;
@@ -503,11 +520,11 @@
 
     // The single colour of a note type, from the equipped skin when it sets one.
     colorOf(type) {
-      const sk = this.skin || {};
-      if (type === 'hold') return sk.hold || NOTE_COLORS.hold;
-      if (type === 'flick') return sk.flick || NOTE_COLORS.flick;
+      const sk = this.skin || {}, tn = (this.theme && this.theme.game.notes) || {};
+      if (type === 'hold') return sk.hold || tn.hold || NOTE_COLORS.hold;
+      if (type === 'flick') return sk.flick || tn.flick || NOTE_COLORS.flick;
       if (type === 'sky') return NOTE_COLORS.sky;
-      return sk.tap || NOTE_COLORS.tap;
+      return sk.tap || tn.tap || NOTE_COLORS.tap;
     }
 
     satp(v) { return Math.round(Math.min(100, v * this.sat)); }
@@ -517,7 +534,7 @@
       const g = this.g;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.font = '700 ' + Math.round(12 + 2 * this.unit) + 'px ' + FONT;
+      g.font = '700 ' + Math.round(12 + 2 * this.unit) + 'px ' + this.font;
       g.fillStyle = 'rgba(232,235,245,0.32)';
       KEY_LABELS[this.controls].forEach((k, i) => g.fillText(k, xs[i], y));
     }
@@ -531,7 +548,7 @@
         const k = (perf - p.at) / 480;
         if (k >= 1) { this.popups.splice(i, 1); continue; }
         g.globalAlpha = 1 - k * k;
-        g.font = '900 ' + Math.round(11 + 3 * u) + 'px ' + FONT;
+        g.font = '900 ' + Math.round(11 + 3 * u) + 'px ' + this.font;
         g.lineWidth = 3;
         g.strokeStyle = 'rgba(6,7,12,0.7)';
         const y = p.y - (22 + 18 * k) * u;
@@ -648,7 +665,7 @@
       const prog = Math.max(0, Math.min(1, (now - this.rangeStart) / span));
       g.fillStyle = 'rgba(255,255,255,0.08)';
       g.fillRect(0, 0, W, 4);
-      g.fillStyle = '#4de1ff';
+      g.fillStyle = this.accent;
       g.fillRect(0, 0, W * prog, 4);
       g.fillStyle = 'rgba(255,255,255,0.35)';
       for (const sec of this.analysis.sections) {
@@ -660,19 +677,19 @@
       g.textAlign = 'right';
       g.textBaseline = 'top';
       g.fillStyle = 'rgba(232,235,245,0.5)';
-      g.font = '600 ' + Math.round(10 + 1.5 * u) + 'px ' + FONT;
+      g.font = '600 ' + Math.round(10 + 1.5 * u) + 'px ' + this.font;
       g.fillText('SCORE', W - pad, 14);
       // Dark outlines keep the score readable over light tiles.
       g.lineJoin = 'round';
       g.lineWidth = 4;
       g.strokeStyle = 'rgba(6,7,12,0.75)';
-      g.font = '800 ' + Math.round(20 + 4 * u) + 'px ' + FONT;
+      g.font = '800 ' + Math.round(20 + 4 * u) + 'px ' + this.font;
       const scoreText = String(Math.round(this.displayScore)).padStart(7, '0');
       g.strokeText(scoreText, W - pad, 28);
       g.fillStyle = '#f3f5ff';
       g.fillText(scoreText, W - pad, 28);
       const acc = s.judged ? s.accSum / s.judged * 100 : 100;
-      g.font = '600 ' + Math.round(11 + 1.5 * u) + 'px ' + FONT;
+      g.font = '600 ' + Math.round(11 + 1.5 * u) + 'px ' + this.font;
       g.lineWidth = 3;
       g.strokeText(acc.toFixed(2) + '%', W - pad, 30 + 24 + 4 * u);
       g.fillStyle = 'rgba(232,235,245,0.75)';
@@ -693,7 +710,7 @@
       g.fillRect(gx + gw * 0.7 - 1, gy - 3, 2, gh + 6);
       g.textAlign = 'left';
       g.textBaseline = 'top';
-      g.font = '700 ' + Math.round(9 + 1.5 * u) + 'px ' + FONT;
+      g.font = '700 ' + Math.round(9 + 1.5 * u) + 'px ' + this.font;
       g.fillStyle = cleared ? 'rgba(94,240,255,0.9)' : 'rgba(232,235,245,0.55)';
       g.fillText('CLEAR ' + Math.floor(s.gauge) + '%', gx, gy + gh + 5);
 
@@ -703,14 +720,14 @@
       if (s.combo >= 3) {
         const bump = Math.max(0, 1 - (now - this.comboBumpAt) / 0.14);
         const size = Math.round((28 + 16 * u) * (comboScale || 1) * (1 + 0.14 * bump));
-        g.font = '800 ' + size + 'px ' + FONT;
+        g.font = '800 ' + size + 'px ' + this.font;
         g.lineWidth = 4;
         g.strokeStyle = 'rgba(6,7,12,0.55)';
         g.strokeText(String(s.combo), cx, comboY);
         g.fillStyle = '#ffffff';
         g.fillText(String(s.combo), cx, comboY);
         g.fillStyle = 'rgba(232,235,245,0.5)';
-        g.font = '700 ' + Math.round(10 + 1.5 * u) + 'px ' + FONT;
+        g.font = '700 ' + Math.round(10 + 1.5 * u) + 'px ' + this.font;
         g.fillText('COMBO', cx, comboY + size * 0.62);
       }
       // Judgment: centred in portrait; in landscape it pops up where the note was hit.
@@ -721,14 +738,14 @@
         const pop = 1 + 0.3 * Math.max(0, 1 - Math.max(0, since) / 0.09);
         const size = Math.round((18 + 6 * u) * pop);
         g.globalAlpha = 1 - k * k;
-        g.font = '900 ' + size + 'px ' + FONT;
+        g.font = '900 ' + size + 'px ' + this.font;
         g.lineWidth = 5;
         g.strokeStyle = 'rgba(6,7,12,0.6)';
         g.strokeText(J.label, cx, judgeY - k * 8);
         g.fillStyle = J.color;
         g.fillText(J.label, cx, judgeY - k * 8);
         if ((this.lastJudge === 'great' || this.lastJudge === 'good') && this.lastJudgeDt) {
-          g.font = '700 ' + Math.round(10 + u) + 'px ' + FONT;
+          g.font = '700 ' + Math.round(10 + u) + 'px ' + this.font;
           g.fillStyle = 'rgba(232,235,245,0.75)';
           g.fillText(this.lastJudgeDt < 0 ? 'EARLY' : 'LATE', cx, judgeY + size * 0.75 - k * 8);
         }
@@ -739,7 +756,7 @@
       if (ms >= 0 && ms < 1.1) {
         const k = ms / 1.1;
         g.globalAlpha = (1 - k) * 0.9;
-        g.font = '900 ' + Math.round((24 + 10 * u) * (1 + 0.2 * k)) + 'px ' + FONT;
+        g.font = '900 ' + Math.round((24 + 10 * u) * (1 + 0.2 * k)) + 'px ' + this.font;
         g.fillStyle = '#ffd166';
         let my = comboY - (40 + 20 * u);
         if (my < 40) my = comboY + 56 * u;
@@ -752,7 +769,7 @@
         if (d >= 0 && d < 1.4) {
           g.globalAlpha = Math.min(1, (1.4 - d) * 2) * 0.9;
           g.fillStyle = '#c3a6ff';
-          g.font = '800 ' + Math.round(13 + 2 * u) + 'px ' + FONT;
+          g.font = '800 ' + Math.round(13 + 2 * u) + 'px ' + this.font;
           g.fillText('SPEED UP  ▲', cx, (judgeY != null ? judgeY : comboY + 40 * u) + (40 + 18 * u));
           g.globalAlpha = 1;
         }
@@ -766,10 +783,10 @@
       }
       if (countdown != null && !this.paused) {
         g.fillStyle = 'rgba(243,245,255,0.9)';
-        g.font = '900 ' + Math.round(H * 0.09) + 'px ' + FONT;
+        g.font = '900 ' + Math.round(H * 0.09) + 'px ' + this.font;
         g.fillText(String(Math.min(countdown, 9)), cx, H * 0.46);
         g.fillStyle = 'rgba(232,235,245,0.5)';
-        g.font = '700 ' + Math.round(11 + 1.5 * u) + 'px ' + FONT;
+        g.font = '700 ' + Math.round(11 + 1.5 * u) + 'px ' + this.font;
         g.fillText(now < this.rangeStart ? 'GET READY' : 'RESUMING', cx, H * 0.46 + H * 0.065);
       }
     }
@@ -796,27 +813,35 @@
       c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
       const g = c.getContext('2d');
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const bg = g.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, 'hsl(' + this.hue + ',' + this.satp(48) + '%,12%)');
-      bg.addColorStop(0.6, 'hsl(' + (this.hue + 25) + ',' + this.satp(52) + '%,7%)');
-      bg.addColorStop(1, 'hsl(' + (this.hue + 40) + ',' + this.satp(55) + '%,4%)');
-      g.fillStyle = bg;
-      g.fillRect(0, 0, W, H);
-      g.globalCompositeOperation = 'lighter';
-      g.globalAlpha = 0.22;
-      [[0.2, 0.25, this.hue], [0.85, 0.45, this.hue + 60], [0.45, 0.85, this.hue - 40]].forEach(([bx, by, h]) => {
-        const r = Math.max(W, H) * 0.6;
-        g.drawImage(glow(hslHex(h, this.satp(80), 55)), W * bx - r, H * by - r, r * 2, r * 2);
-      });
-      g.globalAlpha = 0.5;
-      g.fillStyle = '#dfe8ff';
-      for (const st of this.stars) g.fillRect(st.x * W, st.y * H, st.r, st.r);
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
+      const th = this.theme;
+      if (th && th.image) {
+        // Picture theme: the picture, a veil for contrast, then the lane field.
+        drawCover(g, th.image, W, H, th.focal);
+        g.fillStyle = th.game.veil;
+        g.fillRect(0, 0, W, H);
+      } else {
+        const bg = g.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, 'hsl(' + this.hue + ',' + this.satp(48) + '%,12%)');
+        bg.addColorStop(0.6, 'hsl(' + (this.hue + 25) + ',' + this.satp(52) + '%,7%)');
+        bg.addColorStop(1, 'hsl(' + (this.hue + 40) + ',' + this.satp(55) + '%,4%)');
+        g.fillStyle = bg;
+        g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.22;
+        [[0.2, 0.25, this.hue], [0.85, 0.45, this.hue + 60], [0.45, 0.85, this.hue - 40]].forEach(([bx, by, h]) => {
+          const r = Math.max(W, H) * 0.6;
+          g.drawImage(glow(hslHex(h, this.satp(80), 55)), W * bx - r, H * by - r, r * 2, r * 2);
+        });
+        g.globalAlpha = 0.5;
+        g.fillStyle = '#dfe8ff';
+        for (const st of this.stars) g.fillRect(st.x * W, st.y * H, st.r, st.r);
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
+      }
       const fx = this.fieldX, fw = this.fieldW, lw = this.laneW, hitY = this.hitY;
-      g.fillStyle = 'rgba(8,10,22,0.55)';
+      g.fillStyle = th ? th.game.field : 'rgba(8,10,22,0.55)';
       g.fillRect(fx, 0, fw, H);
-      g.fillStyle = 'rgba(160,190,255,0.12)';
+      g.fillStyle = th ? th.game.line : 'rgba(160,190,255,0.12)';
       for (let l = 0; l <= 4; l++) g.fillRect(Math.round(fx + l * lw) - 0.5, 0, 1, hitY);
       for (let l = 0; l < 4; l++) {
         const x = fx + l * lw + 5, w = lw - 10, y = hitY + 10, h = H - hitY - 22;
@@ -824,7 +849,7 @@
         roundRect(g, x, y, w, h, 14);
         g.fillStyle = 'rgba(255,255,255,0.035)';
         g.fill();
-        g.strokeStyle = 'rgba(170,190,255,0.14)';
+        g.strokeStyle = th ? th.game.line : 'rgba(170,190,255,0.14)';
         g.lineWidth = 1.5;
         g.stroke();
       }
@@ -869,7 +894,7 @@
         const flash = Math.max(0, 1 - (now - this.laneFlash[l]) / 0.22);
         const a = Math.max(pressed.has(l) ? 0.14 : 0, flash * 0.22);
         if (a > 0.01) {
-          g.fillStyle = 'rgba(110,220,255,' + a + ')';
+          g.fillStyle = 'rgba(' + this.accentRgb + ',' + a + ')';
           g.fillRect(fx + l * lw + 1, hitY - H * 0.35, lw - 2, H * 0.35);
           g.fillRect(fx + l * lw + 5, hitY + 10, lw - 10, H - hitY - 22);
         }
@@ -878,7 +903,7 @@
       this.drawNotes(now, dNow);
 
       // Hit line, brighter on the beat.
-      g.fillStyle = 'rgba(94,240,255,' + (0.1 + 0.2 * pulse) + ')';
+      g.fillStyle = 'rgba(' + this.accentRgb + ',' + (0.1 + 0.2 * pulse) + ')';
       g.fillRect(fx, hitY - 6, fw, 12);
       g.fillStyle = '#e8f7ff';
       g.fillRect(fx, hitY - 1.5, fw, 3);
@@ -993,24 +1018,31 @@
       c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
       const g = c.getContext('2d');
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const bg = g.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, 'hsl(' + this.hue + ',' + this.satp(55) + '%,5%)');
-      bg.addColorStop(0.28, 'hsl(' + (this.hue + 15) + ',' + this.satp(60) + '%,16%)');
-      bg.addColorStop(0.36, 'hsl(' + (this.hue + 30) + ',' + this.satp(55) + '%,9%)');
-      bg.addColorStop(1, 'hsl(' + (this.hue + 40) + ',' + this.satp(55) + '%,4%)');
-      g.fillStyle = bg;
-      g.fillRect(0, 0, W, H);
-      g.globalCompositeOperation = 'lighter';
-      g.globalAlpha = 0.5;
-      g.fillStyle = '#e6ecff';
-      for (const st of this.stars) g.fillRect(st.x * W, st.y * H * 0.34, st.r, st.r);
-      g.globalAlpha = 0.45;
-      g.drawImage(glow(hslHex(this.hue + 20, this.satp(90), 60)), this.cx - W * 0.7, this.y0 - H * 0.2, W * 1.4, H * 0.55);
-      g.globalAlpha = 0.3;
-      g.drawImage(glow('#ff6fb5'), this.cx - W * 0.1, this.y0 - H * 0.08, W * 0.55, H * 0.3);
-      g.drawImage(glow('#4de1ff'), this.cx - W * 0.45, this.y0 - H * 0.08, W * 0.55, H * 0.3);
-      g.globalAlpha = 1;
-      g.globalCompositeOperation = 'source-over';
+      const th = this.theme;
+      if (th && th.image) {
+        drawCover(g, th.image, W, H, th.focal);
+        g.fillStyle = th.game.veil;
+        g.fillRect(0, 0, W, H);
+      } else {
+        const bg = g.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, 'hsl(' + this.hue + ',' + this.satp(55) + '%,5%)');
+        bg.addColorStop(0.28, 'hsl(' + (this.hue + 15) + ',' + this.satp(60) + '%,16%)');
+        bg.addColorStop(0.36, 'hsl(' + (this.hue + 30) + ',' + this.satp(55) + '%,9%)');
+        bg.addColorStop(1, 'hsl(' + (this.hue + 40) + ',' + this.satp(55) + '%,4%)');
+        g.fillStyle = bg;
+        g.fillRect(0, 0, W, H);
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.5;
+        g.fillStyle = '#e6ecff';
+        for (const st of this.stars) g.fillRect(st.x * W, st.y * H * 0.34, st.r, st.r);
+        g.globalAlpha = 0.45;
+        g.drawImage(glow(hslHex(this.hue + 20, this.satp(90), 60)), this.cx - W * 0.7, this.y0 - H * 0.2, W * 1.4, H * 0.55);
+        g.globalAlpha = 0.3;
+        g.drawImage(glow('#ff6fb5'), this.cx - W * 0.1, this.y0 - H * 0.08, W * 0.55, H * 0.3);
+        g.drawImage(glow('#4de1ff'), this.cx - W * 0.45, this.y0 - H * 0.08, W * 0.55, H * 0.3);
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
+      }
       const zFar = 1.05, zNear = -0.18;
       const fX = (u, z) => this.cx + (u - 0.5) * this.floorW * this.s(z), fY = (z) => this.floorY(z);
       g.beginPath();
@@ -1019,14 +1051,18 @@
       g.lineTo(fX(1, zNear), fY(zNear));
       g.lineTo(fX(0, zNear), fY(zNear));
       g.closePath();
-      const tg = g.createLinearGradient(0, fY(zFar), 0, H);
-      tg.addColorStop(0, 'rgba(20,24,48,0.35)');
-      tg.addColorStop(1, 'rgba(12,14,30,0.92)');
-      g.fillStyle = tg;
+      if (th) {
+        g.fillStyle = th.game.field;
+      } else {
+        const tg = g.createLinearGradient(0, fY(zFar), 0, H);
+        tg.addColorStop(0, 'rgba(20,24,48,0.35)');
+        tg.addColorStop(1, 'rgba(12,14,30,0.92)');
+        g.fillStyle = tg;
+      }
       g.fill();
       for (let l = 0; l <= 4; l++) {
         const edge = l === 0 || l === 4;
-        g.strokeStyle = edge ? 'rgba(210,222,255,0.55)' : 'rgba(170,190,255,0.12)';
+        g.strokeStyle = edge ? (th ? 'rgba(' + this.accentRgb + ',0.7)' : 'rgba(210,222,255,0.55)') : (th ? th.game.line : 'rgba(170,190,255,0.12)');
         g.lineWidth = edge ? 2 : 1;
         g.beginPath();
         g.moveTo(fX(l / 4, zFar), fY(zFar));
@@ -1226,12 +1262,12 @@
         g.lineTo(this.floorX((l + 1) / 4, z1), this.floorY(z1));
         g.lineTo(this.floorX(l / 4, z1), this.floorY(z1));
         g.closePath();
-        g.fillStyle = 'rgba(120,225,255,' + (a * 0.6) + ')';
+        g.fillStyle = 'rgba(' + this.accentRgb + ',' + (a * 0.6) + ')';
         g.fill();
       }
       // Judgment line.
       const x0 = this.floorX(0, 0), x1 = this.floorX(1, 0);
-      g.fillStyle = 'rgba(94,240,255,' + (0.12 + 0.2 * pulse) + ')';
+      g.fillStyle = 'rgba(' + this.accentRgb + ',' + (0.12 + 0.2 * pulse) + ')';
       g.fillRect(x0, this.y1 - 7, x1 - x0, 14);
       g.fillStyle = '#e8f7ff';
       g.fillRect(x0, this.y1 - 2, x1 - x0, 4);

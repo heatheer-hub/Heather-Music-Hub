@@ -13,7 +13,7 @@
   const isTouch = () => !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   const SECTION_COLORS = ['#4de1ff', '#8b5cff', '#ff6fb5', '#ffd166', '#58e6a0', '#6d8bff', '#ff9a5c'];
 
-  const settings = Object.assign({ speedMod: 1, offsetMs: 0, tapOffsetMs: 0, controls: 'keys', difficulty: 'vnormal' }, U.store.get('bt:settings', {}));
+  const settings = Object.assign({ speedMod: 1, offsetMs: 0, tapOffsetMs: 0, controls: 'keys', appTheme: 'starry', difficulty: 'vnormal' }, U.store.get('bt:settings', {}));
   if (!PTChart.DIFFICULTIES[settings.difficulty]) settings.difficulty = 'vnormal';
   const state = {
     song: null,       // { title, artist, hash, buffer, fileName, size }
@@ -424,7 +424,9 @@
       player: state.player,
       hue: look.theme.hue != null ? look.theme.hue : 200 + (state.song.hash % 130),
       sat: look.theme.sat,
-      skin: look.skin,
+      skin: PTProgress.load().equipped.skin !== 'aurora' ? look.skin : null,
+      theme: await gameThemeOpts(),
+      font: PTThemes.fontFor(activeTheme()),
       tapOffset: settings.tapOffsetMs / 1000,
       controls: settings.controls,
       showKeys: !isTouch(),
@@ -651,7 +653,16 @@
         const bytes = buf.slice(base + s.offset, base + s.offset + s.size);
         if (await saveToDevice(bytes, { fileName: s.file, title: s.title, artist: s.artist })) added++;
       }
-      setStatus(added ? 'Imported ' + added + (added === 1 ? ' song' : ' songs') + ' into My Songs.' : 'Every song in this pack is already in My Songs.');
+      let pics = 0;
+      for (const im of header.images || []) {
+        const th = PTThemes.byFile(im.file);
+        if (!th) continue;
+        await saveThemeImage(th.id, buf.slice(base + im.offset, base + im.offset + im.size));
+        pics++;
+      }
+      if (pics) applyAppTheme();
+      setStatus((added ? 'Imported ' + added + (added === 1 ? ' song' : ' songs') + ' into My Songs.' : 'Every song in this pack is already in My Songs.') +
+        (pics ? ' Added ' + pics + ' theme pictures.' : ''));
       syncCloud();
     } catch (err) {
       showLoadError(err);
@@ -907,6 +918,7 @@
         if (!cloudFiles.some(f => f.path === up.path)) cloudFiles.push({ name: up.path.split('/').pop(), path: up.path, size: bytes.length, sha: up.sha });
         if (s.source === 'device') await setCloudPath(s, up.path);
       }
+      await syncThemeImages();
       cloud.syncedAt = Date.now();
       cloud.msg = '';
     } catch (e) {
@@ -1128,6 +1140,101 @@
     $('install-card').classList.toggle('hidden', !show);
   }
 
+  // ---------- app themes (picture backgrounds, free) ----------
+  // A theme's picture comes from this device's storage (song pack / cloud), or from the local
+  // Background folder when the app is opened from this computer's project folder.
+  const themeUrls = new Map(); // theme id -> image URL
+  function activeTheme() { return PTThemes.byId(settings.appTheme); }
+
+  async function getThemeImageBytes(id) {
+    try {
+      const d = await db();
+      const buf = await idbReq(d.transaction('audio').objectStore('audio').get('bg:' + id));
+      return buf ? new Uint8Array(buf) : null;
+    } catch (e) { return null; }
+  }
+  async function saveThemeImage(id, bytes) {
+    const d = await db();
+    const t = d.transaction('audio', 'readwrite');
+    t.objectStore('audio').put(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), 'bg:' + id);
+    await idbDone(t);
+    const old = themeUrls.get(id);
+    if (old && old.startsWith('blob:')) URL.revokeObjectURL(old);
+    themeUrls.delete(id);
+  }
+  function probeImage(src) {
+    return new Promise(res => { const im = new Image(); im.onload = () => res(true); im.onerror = () => res(false); im.src = src; });
+  }
+  async function themeImageUrl(theme) {
+    if (!theme.file) return null;
+    if (themeUrls.has(theme.id)) return themeUrls.get(theme.id);
+    let url = null;
+    const bytes = await getThemeImageBytes(theme.id);
+    if (bytes) url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+    else {
+      const local = 'Background/' + encodeURIComponent(theme.file);
+      if (await probeImage(local)) url = local;
+    }
+    if (url) themeUrls.set(theme.id, url);
+    return url;
+  }
+  async function applyAppTheme() {
+    const th = activeTheme();
+    PTThemes.apply(th, await themeImageUrl(th));
+  }
+  // Theme options for a game: the decoded picture plus its gameplay palette.
+  async function gameThemeOpts() {
+    const th = activeTheme();
+    if (!th.game) return null;
+    const url = await themeImageUrl(th);
+    let image = null;
+    if (url) {
+      image = new Image();
+      image.src = url;
+      try { await image.decode(); } catch (e) { image = null; }
+    }
+    return { image, focal: th.focal, game: th.game };
+  }
+
+  async function renderThemes() {
+    const cur = activeTheme().id;
+    const cards = await Promise.all(PTThemes.THEMES.map(async th => {
+      const url = await themeImageUrl(th);
+      const u = th.ui;
+      const notes = th.game ? th.game.notes : { tap: '#35b6ff', hold: '#9b6bff', flick: '#ff8a3d' };
+      const thumb = url
+        ? 'background-image:url(&quot;' + url + '&quot;);background-position:' + th.focal[0] + '% ' + th.focal[1] + '%'
+        : 'background:linear-gradient(135deg,' + u.bg + ',' + u.c2 + ' 60%,' + u.c1 + ')';
+      const state = th.id === cur ? 'In use' : (th.file && !url ? 'Picture not on this device yet' : 'Free');
+      return '<button class="theme-card" role="radio" data-theme="' + th.id + '" aria-checked="' + (th.id === cur) + '">' +
+        '<span class="theme-thumb" style="' + thumb + '"><span class="theme-swatches">' +
+        [notes.tap, notes.hold, notes.flick].map(c => '<i style="background:' + c + '"></i>').join('') + '</span></span>' +
+        '<span class="theme-name">' + th.name + '</span><span class="theme-state">' + state + '</span></button>';
+    }));
+    $('theme-grid').innerHTML = cards.join('');
+  }
+
+  // Cloud: theme pictures travel in the private repository too ("backgrounds/<id>.jpg").
+  async function syncThemeImages() {
+    const remote = await PTCloud.listImages();
+    const have = new Set(remote.map(r => r.name));
+    let changed = false;
+    for (const th of PTThemes.THEMES) {
+      if (!th.file) continue;
+      const name = th.id + '.jpg';
+      const local = await getThemeImageBytes(th.id);
+      if (local && !have.has(name)) {
+        setCloudMsg('Uploading background ' + th.name + '…');
+        await PTCloud.uploadImage(name, local);
+      } else if (!local && have.has(name)) {
+        setCloudMsg('Downloading background ' + th.name + '…');
+        await saveThemeImage(th.id, await PTCloud.download('backgrounds/' + name));
+        changed = true;
+      }
+    }
+    if (changed) { applyAppTheme(); if ($('screen-rewards').classList.contains('active')) renderThemes(); }
+  }
+
   // ---------- records, rewards and guide tabs ----------
   const DIFF_SHORT = { vnormal: 'V · Normal', vhard: 'V · Hard', hnormal: 'H · Normal', hhard: 'H · Hard' };
   const CLEAR_BADGE = { fc: 'FC', ap: 'AP', fail: 'LOST' };
@@ -1205,11 +1312,13 @@
 
   function renderRewards(msg) {
     const p = PTProgress.load();
+    renderThemes();
     $('wallet').innerHTML = levelBlock(PTProgress.levelInfo(p.exp), p.coins) + (msg ? '<p class="status wallet-msg">' + esc(msg) + '</p>' : '');
     $('shop-skins').innerHTML = PTProgress.SHOP.filter(i => i.type === 'skin').map(item => {
       const skin = PTProgress.SKINS[item.key];
-      const tiles = [['Tap', skin.tap], ['Hold', skin.hold], ['Flick', skin.flick]].map(([k, c]) => '<i title="' + k + '" style="background:' + c + '"></i>').join('');
-      return '<div class="shop-item"><div class="skin-preview">' + tiles + '</div><div class="shop-name">' + skin.name + '</div>' + shopButton(item) + '</div>';
+      const cols = item.key === 'aurora' && activeTheme().game ? activeTheme().game.notes : skin;
+      const tiles = [['Tap', cols.tap], ['Hold', cols.hold], ['Flick', cols.flick]].map(([k, c]) => '<i title="' + k + '" style="background:' + c + '"></i>').join('');
+      return '<div class="shop-item"><div class="skin-preview">' + tiles + '</div><div class="shop-name">' + (item.key === 'aurora' && activeTheme().game ? 'Theme colours' : skin.name) + '</div>' + shopButton(item) + '</div>';
     }).join('');
     $('shop-themes').innerHTML = PTProgress.SHOP.filter(i => i.type === 'theme').map(item => {
       const th = PTProgress.THEMES[item.key];
@@ -1313,6 +1422,14 @@
     $('btn-newsong').addEventListener('click', () => { input.value = ''; show('screen-home'); });
     initLibrary();
     $('cloud-card').addEventListener('click', onCloudCard);
+    $('theme-grid').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-theme]');
+      if (!b) return;
+      settings.appTheme = b.dataset.theme;
+      saveSettings();
+      applyAppTheme();
+      renderRewards();
+    });
     $('btn-calibrate').addEventListener('click', openCalib);
     $('btn-calib-start').addEventListener('click', startCalib);
     $('btn-calib-close').addEventListener('click', closeCalib);
@@ -1368,5 +1485,7 @@
     });
   }
 
+  PTThemes.apply(activeTheme(), null);
+  applyAppTheme();
   init();
 })();

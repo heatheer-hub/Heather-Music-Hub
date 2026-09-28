@@ -118,6 +118,27 @@
     return { path: out.content.path, sha: out.content.sha };
   }
 
+  // Theme pictures live next to the songs, in "backgrounds/<theme id>.jpg".
+  async function listImages() {
+    const c = config();
+    const res = await api('/repos/' + c.repo + '/contents/backgrounds?per_page=100');
+    if (res.status === 404) return [];
+    if (!res.ok) throw new Error('GitHub error ' + res.status + ' while listing backgrounds.');
+    const items = await res.json();
+    return (Array.isArray(items) ? items : []).filter(it => it.type === 'file' && /\.(jpe?g|png|webp)$/i.test(it.name))
+      .map(it => ({ name: it.name, path: it.path, size: it.size }));
+  }
+  async function uploadImage(name, bytes) {
+    const c = config();
+    const path = 'backgrounds/' + cleanName(name);
+    const res = await api('/repos/' + c.repo + '/contents/' + encodePath(path), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'Add background ' + cleanName(name), content: toBase64(bytes) })
+    });
+    if (!res.ok && res.status !== 422) throw new Error('Upload of background "' + name + '" failed (GitHub error ' + res.status + ').');
+  }
+
   async function remove(path, sha) {
     const c = config();
     const res = await api('/repos/' + c.repo + '/contents/' + encodePath(path), {
@@ -128,5 +149,5 @@
     if (!res.ok && res.status !== 404) throw new Error('Could not delete it from the cloud (GitHub error ' + res.status + ').');
   }
 
-  global.PTCloud = { config, connect, disconnect, list, download, upload, remove, cleanName };
+  global.PTCloud = { config, connect, disconnect, list, download, upload, remove, cleanName, listImages, uploadImage };
 })(typeof self !== 'undefined' ? self : this);

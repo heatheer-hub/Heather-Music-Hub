@@ -69,6 +69,14 @@ These are modeled on Arcaea, Phigros and SuperStar, and are saved on the device 
   - Bonuses for a first clear, first Full Combo, first All Perfect, a new best and each level up.
   - 17 achievements pay coins; *Pure Memory* unlocks the Gold skin and *Rising Star* the Nebula theme.
 - **Shop** (Rewards tab): tile skins (Aurora, Ivory, Sakura, Ember, Mint, Gold; each sets one plain colour for taps, holds and flicks) and stage themes (Song colors, Ocean, Sunset, Forest, Midnight, Nebula).
+- **App themes** (top of the Rewards tab, free): seven picture themes made from the `Background`
+  folder (Starry Night, Lantern Walk, Blue Swirl, Clover Hill, Meadow Nap, Duck Pond, Daisy Stream)
+  plus Classic Neon. Each sets the picture behind every screen, a matching palette for cards,
+  buttons, text and accents, the gameplay track and the three note colours (the default skin
+  shows *Theme colours*; any other equipped skin keeps its own). The palettes live in `js/themes.js`.
+  The pictures are other artists' illustrations, so like the songs they stay out of the public
+  repository (`Background/` is git-ignored): the app loads them from the local folder, and they reach
+  the phone inside the song pack or through the cloud library (`backgrounds/` in the private repo).
 - **Records tab:** level, rating, totals, the best score and clear type for each song's four charts, and your last 12 plays. *Save backup* / *Restore backup* moves everything to another device as a JSON file.
 
 The **Guide** tab explains everything above, with separate instructions for phone and computer.
@@ -154,7 +162,8 @@ py tools/build_library.py
 ```
 
 This packs each song into `Songs/library/`, writes `Songs/library.js`, and builds the phone
-song pack `Songs/Heather Music Hub songs.hmhpack` (every song in one file). The home screen then
+song pack `Songs/Heather Music Hub songs.hmhpack` (every song, plus the theme pictures from
+`Background/`, in one file). The home screen then
 lists them under **My Songs**. The page analyzes them in the background, one at a time, and
 pauses while you play. After that, tapping a song goes straight to difficulty selection.
 Rerun the script whenever you add, remove or replace songs. Titles come from the file's tags,

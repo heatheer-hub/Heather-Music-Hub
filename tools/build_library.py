@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SONGS = ROOT / "Songs"
 OUT = SONGS / "library"
 PACK_NAME = "Heather Music Hub songs.hmhpack"
+BACKGROUNDS = ROOT / "Background"
+IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 EXTS = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".oga", ".opus", ".flac", ".webm"}
 
 
@@ -130,15 +132,23 @@ def main():
 def write_pack(files, songs):
     """One file with every song, for the phone: copy it to iCloud Drive (or anywhere the Files
     app sees) and tap "Import song pack" in the app. Layout: b"HMHPACK1", header length
-    (uint32 little-endian), JSON header, then the audio files back to back."""
-    entries, blobs, offset = [], [], 0
+    (uint32 little-endian), JSON header, then the audio files back to back, then the theme
+    pictures of the Background folder."""
+    entries, images, blobs, offset = [], [], [], 0
     for p, s in zip(files, songs):
         data = p.read_bytes()
         entries.append({"file": s["file"], "title": s["title"], "artist": s["artist"],
                         "offset": offset, "size": len(data)})
         blobs.append(data)
         offset += len(data)
-    header = json.dumps({"app": "HeatherMusicHub", "songs": entries}, ensure_ascii=False).encode("utf-8")
+    pictures = sorted(p for p in BACKGROUNDS.iterdir() if p.suffix.lower() in IMAGE_EXT) if BACKGROUNDS.is_dir() else []
+    for p in pictures:
+        data = p.read_bytes()
+        images.append({"file": p.name, "offset": offset, "size": len(data)})
+        blobs.append(data)
+        offset += len(data)
+    header = json.dumps({"app": "HeatherMusicHub", "songs": entries, "images": images},
+                        ensure_ascii=False).encode("utf-8")
     pack = SONGS / PACK_NAME
     with open(pack, "wb") as f:
         f.write(b"HMHPACK1")
@@ -146,7 +156,7 @@ def write_pack(files, songs):
         f.write(header)
         for b in blobs:
             f.write(b)
-    print(f"Wrote song pack: Songs/{PACK_NAME} ({offset / 1e6:.1f} MB)")
+    print(f"Wrote song pack: Songs/{PACK_NAME} ({offset / 1e6:.1f} MB, {len(pictures)} theme pictures)")
 
 
 if __name__ == "__main__":

@@ -14,10 +14,11 @@
   <title>Heather Music Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <div id="bg-layer" aria-hidden="true"></div>
   <div id="app">
 
     <!-- 1. Home / Upload -->
@@ -251,11 +252,14 @@
     <section class="screen tab-screen" id="screen-rewards">
       <h1 class="tab-title">Rewards</h1>
       <div class="card wallet" id="wallet"></div>
+      <h2 class="section-title">App themes · free</h2>
+      <p class="fine section-note">A picture background with matching colours for menus, buttons and notes.</p>
+      <div class="theme-grid" id="theme-grid" role="radiogroup" aria-label="App theme"></div>
       <h2 class="section-title">Tile skins</h2>
       <p class="fine section-note">Colors of the tap tiles in both modes.</p>
       <div class="shop" id="shop-skins"></div>
       <h2 class="section-title">Stage themes</h2>
-      <p class="fine section-note">Background colors while you play.</p>
+      <p class="fine section-note">Gameplay background colours, used with the Classic Neon app theme.</p>
       <div class="shop" id="shop-themes"></div>
       <h2 class="section-title">Achievements</h2>
       <div class="card achievements" id="achievements"></div>
@@ -334,6 +338,7 @@
         <p>Every play gives <b>EXP</b> toward your player level. Clears also give <b>coins</b>: more for higher grades and harder charts, plus bonuses for a first clear, first Full Combo, first All Perfect, a new best and each level up.</p>
         <p>Your <b>rating</b> is the average of your 10 best chart ratings. A chart's rating is its level at 950,000, up to level + 2 at a perfect 1,000,000, so playing harder charts well raises it fastest.</p>
         <p>Spend coins in <b>Rewards</b> on tile skins and stage themes. <b>Achievements</b> pay coins too, and two of them unlock the Gold skin and Nebula theme.</p>
+        <p><b>App themes</b> at the top of Rewards are free: each one is a picture background with menus, buttons, text, gameplay and note colours that match it. With the default skin, notes use the theme's colours; any other skin you equip keeps its own. The pictures reach your phone through the cloud library or the song pack.</p>
       </div>
 
       <div class="card guide">
@@ -389,6 +394,7 @@
   </div>
 
   <script src="js/util.js"></script>
+  <script src="js/themes.js"></script>
   <script src="js/progress.js"></script>
   <script src="js/cloud.js"></script>
   <script src="js/analyzer.js"></script>
