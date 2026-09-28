@@ -13,7 +13,7 @@
   const isTouch = () => !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   const SECTION_COLORS = ['#4de1ff', '#8b5cff', '#ff6fb5', '#ffd166', '#58e6a0', '#6d8bff', '#ff9a5c'];
 
-  const settings = Object.assign({ speedMod: 1, offsetMs: 0, difficulty: 'vnormal' }, U.store.get('bt:settings', {}));
+  const settings = Object.assign({ speedMod: 1, offsetMs: 0, tapOffsetMs: 0, difficulty: 'vnormal' }, U.store.get('bt:settings', {}));
   if (!PTChart.DIFFICULTIES[settings.difficulty]) settings.difficulty = 'vnormal';
   const state = {
     song: null,       // { title, artist, hash, buffer, fileName, size }
@@ -378,6 +378,8 @@
     $('speed-out').textContent = Number(settings.speedMod).toFixed(2).replace(/0$/, '') + '×';
     $('offset').value = settings.offsetMs;
     $('offset-out').textContent = (settings.offsetMs > 0 ? '+' : '') + settings.offsetMs + ' ms';
+    $('tapoffset').value = settings.tapOffsetMs;
+    $('tapoffset-out').textContent = (settings.tapOffsetMs > 0 ? '+' : '') + settings.tapOffsetMs + ' ms';
     $('var-out').textContent = state.variation;
   }
 
@@ -419,6 +421,7 @@
       hue: look.theme.hue != null ? look.theme.hue : 200 + (state.song.hash % 130),
       sat: look.theme.sat,
       skin: look.skin,
+      tapOffset: settings.tapOffsetMs / 1000,
       onEnd: (r) => showResults(r, chart),
       onPauseChange: (p) => $('pause-overlay').classList.toggle('hidden', !p),
       onResize: (game) => {
@@ -519,8 +522,8 @@
       const m = Math.round(r.meanOffsetMs);
       timing += 'Average timing: ' + (m === 0 ? 'spot on' : Math.abs(m) + ' ms ' + (m > 0 ? 'late' : 'early')) + '.';
       if (Math.abs(m) >= 20) {
-        const suggested = U.clamp(Math.round((settings.offsetMs + m) / 5) * 5, -150, 400);
-        timing += ' Suggested audio offset: ' + (suggested > 0 ? '+' : '') + suggested + ' ms.';
+        const suggested = U.clamp(Math.round((settings.tapOffsetMs + m) / 5) * 5, -100, 250);
+        timing += ' Suggested tap timing: ' + (suggested > 0 ? '+' : '') + suggested + ' ms.';
         applyBtn.dataset.value = suggested;
         applyBtn.classList.remove('hidden');
       }
@@ -1279,6 +1282,11 @@
       $('speed-out').textContent = settings.speedMod.toFixed(2).replace(/0$/, '') + '×';
       saveSettings();
     });
+    $('tapoffset').addEventListener('input', (e) => {
+      settings.tapOffsetMs = Number(e.target.value);
+      $('tapoffset-out').textContent = (settings.tapOffsetMs > 0 ? '+' : '') + settings.tapOffsetMs + ' ms';
+      saveSettings();
+    });
     $('offset').addEventListener('input', (e) => {
       settings.offsetMs = Number(e.target.value);
       $('offset-out').textContent = (settings.offsetMs > 0 ? '+' : '') + settings.offsetMs + ' ms';
@@ -1340,7 +1348,7 @@
     show('screen-home');
     registerServiceWorker();
     $('btn-apply-offset').addEventListener('click', (e) => {
-      settings.offsetMs = Number(e.currentTarget.dataset.value) || 0;
+      settings.tapOffsetMs = Number(e.currentTarget.dataset.value) || 0;
       saveSettings();
       e.currentTarget.classList.add('hidden');
       $('r-timing').textContent += ' Applied.';

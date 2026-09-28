@@ -329,7 +329,8 @@
       }
       holds.sort((a, b) => a[0] - b[0]);
     }
-    const inHold = (t) => holds.some(h => t > h[0] - 0.01 && t < h[1] + D.jack);
+    // Same release buffer as the two-hand rule in lane assignment.
+    const inHold = (t) => holds.some(h => t > h[0] - 0.01 && t < h[1] + Math.max(D.jack, 0.2));
 
     // Fill long empty stretches with the best on-beat candidate so the flow never stalls.
     const beatCands = cands.filter(c => c.level <= 1).sort((a, b) => a.t - b.t);
@@ -382,11 +383,16 @@
         }
       }
       if (i > 0 && gap < D.jack && Math.abs(lane - prevLane) === 3) lane = prevLane + Math.sign(lane - prevLane) * 2;
-      if (active && notes[i].t >= active.end + D.jack) active = null;
-      if (active && lane === active.lane) {
-        const step = dir !== 0 ? dir : (rng() < 0.5 ? -1 : 1);
-        lane = lane + step;
-        if (lane < 0 || lane >= LANES) lane = active.lane - step;
+      // Two hands: while one hand holds, every other note belongs to the other hand, so it goes
+      // on the other half of the field (lanes 1-2 = left hand, 3-4 = right hand). The holding
+      // hand also stays busy for a moment after it lets go.
+      const post = Math.max(D.jack, 0.2);
+      if (active && notes[i].t >= active.end + post) active = null;
+      if (active) {
+        const heldLeft = active.lane < 2;
+        if (heldLeft && lane < 2) lane += 2;
+        if (!heldLeft && lane >= 2) lane -= 2;
+        if (i > 0 && lane === prevLane && gap < D.jack) lane = lane % 2 === 0 ? lane + 1 : lane - 1;
       }
       // Horizontal: while an arc is traced, the floor belongs to the other hand's side.
       const arc = arcAt(notes[i].t, 0.15);

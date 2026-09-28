@@ -151,6 +151,11 @@
           <p class="fine">Raise it if your hits are judged late (e.g. Bluetooth headphones), or let the sync test set it.</p>
           <button class="btn small" id="btn-calibrate">Test with taps</button>
         </div>
+        <div class="setting">
+          <div class="setting-head"><span>Tap timing</span><output id="tapoffset-out">0 ms</output></div>
+          <input type="range" id="tapoffset" min="-100" max="250" step="5" value="0">
+          <p class="fine">If you often see LATE when you tap right on the line, raise this. The results screen suggests a value after each song.</p>
+        </div>
       </div>
 
       <div class="bottom-actions">
@@ -204,7 +209,7 @@
         </div>
         <div class="judges" id="r-judges"></div>
         <p class="fine" id="r-timing"></p>
-        <button class="btn small hidden" id="btn-apply-offset">Apply suggested offset</button>
+        <button class="btn small hidden" id="btn-apply-offset">Apply suggested tap timing</button>
       </div>
       <div class="card rewards-card" id="r-rewards"></div>
       <div class="bottom-actions stack">
@@ -310,7 +315,7 @@
 
       <div class="card guide">
         <h2>5. Scoring and clearing</h2>
-        <p><b>Perfect</b> ±45 ms, <b>Great</b> ±90 ms, <b>Good</b> ±135 ms, otherwise <b>Miss</b>. Holds score on the press and on the release, and arcs score every half beat you stay on them.</p>
+        <p><b>Perfect</b> ±100 ms, <b>Great</b> ±140 ms, <b>Good</b> ±190 ms, otherwise <b>Miss</b>. You can slide a finger from one lane into the next to hit it without lifting. Holds score on the press and on the release, and arcs score every half beat you stay on them.</p>
         <p>The <b>clear gauge</b> at the top fills as you hit notes and drops on misses. End the song at <b>70% or more</b> to clear it; below that the result is <i>Track Lost</i>.</p>
         <p>Score goes up to 1,000,000. Grades: <b>AP</b> all perfect, <b>SS</b> 980k, <b>S</b> 950k, <b>A</b> 900k, <b>B</b> 800k, <b>C</b> 700k. No misses at all is a <b>Full Combo</b>.</p>
       </div>

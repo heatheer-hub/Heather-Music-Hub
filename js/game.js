@@ -14,8 +14,10 @@
 (function (global) {
   'use strict';
 
-  const W_PERFECT = 0.045, W_GREAT = 0.09, W_GOOD = 0.135, W_EARLY_MISS = 0.2;
-  const HOLD_RELEASE_GRACE = 0.15;
+  // Timing windows (seconds from the note's exact time): Perfect ±100 ms, Great ±140 ms,
+  // Good ±190 ms. A tap 190–250 ms early on a note counts as its miss; earlier taps are ignored.
+  const W_PERFECT = 0.1, W_GREAT = 0.14, W_GOOD = 0.19, W_EARLY_MISS = 0.25;
+  const HOLD_RELEASE_GRACE = 0.2;
   const FLICK_DIST = 24;      // px of travel that turns a touch into a flick
   const FLICK_WINDOW = 0.3;   // s after the touch to complete the swipe
   const ARC_GRACE = 0.2;      // s: an arc tick passes if a finger was on the arc this recently
@@ -157,6 +159,7 @@
       this.sat = opts.sat == null ? 1 : opts.sat;       // stage theme saturation
       this.skin = opts.skin || null;                    // tile skin: { lanes: [[light, dark] x4], flick? }
       this.popups = [];                                 // judgment pop-ups at the hit position
+      this.tapOffset = opts.tapOffset || 0;             // s; positive = you usually tap late
       this.S = this.chart.speed;
       const A = this.analysis;
       this.beats = A.beats;
@@ -300,7 +303,7 @@
       e.preventDefault();
       if (this.paused || this.finished) return;
       const { x, y } = this.localXY(e);
-      const t = this.player.timeAtEvent(e);
+      const t = this.tapTime(e);
       const id = 'p' + e.pointerId;
       this.inputDown(id, x, y, t);
     }
@@ -308,9 +311,10 @@
       const p = this.ptrs.get('p' + e.pointerId);
       if (!p) return;
       const { x, y } = this.localXY(e);
-      this.inputMove('p' + e.pointerId, x, y, this.player.timeAtEvent(e));
+      this.inputMove('p' + e.pointerId, x, y, this.tapTime(e));
     }
-    onPointerUp(e) { this.inputUp('p' + e.pointerId, this.player.timeAtEvent(e)); }
+    onPointerUp(e) { this.inputUp('p' + e.pointerId, this.tapTime(e)); }
+    tapTime(e) { return this.player.timeAtEvent(e) - this.tapOffset; }
     onKeyDown(e) {
       if (e.code === 'Escape' || e.code === 'Space') {
         e.preventDefault();
@@ -322,11 +326,11 @@
       e.preventDefault();
       const id = 'k' + e.code;
       this.ptrs.set(id, { key: true, lane, x: -1, y: -1, x0: -1, y0: -1 });
-      this.pressLane(id, lane, this.player.timeAtEvent(e), true);
+      this.pressLane(id, lane, this.tapTime(e), true);
     }
     onKeyUp(e) {
       if (LANE_KEYS[e.code] == null) return;
-      this.inputUp('k' + e.code, this.player.timeAtEvent(e));
+      this.inputUp('k' + e.code, this.tapTime(e));
     }
 
     // Public so tests / bots can drive the game without real events.
@@ -343,6 +347,18 @@
       for (const n of this.pendingFlicks.slice()) {
         if (n.flickBy === id && Math.hypot(x - p.x0, y - p.y0) >= FLICK_DIST * Math.max(0.8, this.unit)) this.resolveFlick(n, true);
       }
+      // Sliding a finger from one lane into the next (without lifting it) plays the new lane,
+      // unless that finger is holding a hold note.
+      const lane = this.slideLane(p);
+      if (lane >= 0 && p.lane >= 0 && lane !== p.lane && !this.isHolding(id)) this.pressLane(id, lane, t, false, true);
+    }
+    slideLane() { return -1; }
+    isHolding(id) {
+      for (let i = this.drawStart; i < this.notes.length; i++) {
+        const n = this.notes[i];
+        if (n.hold === 1 && n.holder === id) return true;
+      }
+      return false;
     }
     inputUp(id, t) {
       if (!this.ptrs.has(id)) return;
@@ -360,16 +376,18 @@
       return a <= W_PERFECT ? 'perfect' : a <= W_GREAT ? 'great' : 'good';
     }
 
-    pressLane(id, lane, t, viaKey) {
+    pressLane(id, lane, t, viaKey, slide) {
       this.laneFlash[lane] = t;
       const p = this.ptrs.get(id);
       if (p) p.lane = lane;
       const q = this.laneQ[lane];
-      const idx = this.laneIdx[lane];
-      if (idx >= q.length) return;
-      const n = this.notes[q[idx]];
+      if (this.laneIdx[lane] >= q.length) return;
+      // The tap goes to the earliest note still waiting in this lane (a late tap stays with the
+      // note it was meant for instead of jumping ahead to the next one).
+      const n = this.notes[q[this.laneIdx[lane]]];
       const dt = t - n.t;
       if (dt < -W_EARLY_MISS) return; // nothing close: harmless tap
+      if (slide && dt < -W_GOOD) return; // sliding past a lane early is not a miss
       this.laneIdx[lane]++;
       if (dt < -W_GOOD || dt > W_GOOD) { this.missNote(n, t); return; }
       if (n.type === 'flick' && !viaKey) {
@@ -786,6 +804,7 @@
       if (lane < 0) return;
       this.pressLane(id, lane, t, false);
     }
+    slideLane(p) { return this.laneAt(p.x); }
 
     notePos(n) { return { x: this.fieldX + (n.lane + 0.5) * this.laneW, y: this.hitY }; }
     yAt(t, dNow) { return this.hitY - (this.S.at(t) - dNow) * this.hitY; }
@@ -1020,6 +1039,7 @@
       const lane = this.laneAt(p.x);
       if (lane >= 0) this.pressLane(id, lane, t, false);
     }
+    slideLane(p) { return p.y >= this.skyBound ? this.laneAt(p.x) : -1; }
 
     updateMode(now) {
       while (this.skyIdx < this.skyQ.length) {
