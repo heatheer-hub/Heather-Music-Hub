@@ -14,10 +14,10 @@
 (function (global) {
   'use strict';
 
-  // Timing windows (seconds from the note's exact time): Perfect ±100 ms, Great ±140 ms,
-  // Good ±190 ms. A tap 190–250 ms early on a note counts as its miss; earlier taps are ignored.
-  const W_PERFECT = 0.1, W_GREAT = 0.14, W_GOOD = 0.19, W_EARLY_MISS = 0.25;
-  const HOLD_RELEASE_GRACE = 0.2;
+  // Timing windows (seconds from the note's exact time): Perfect ±150 ms, Great ±190 ms,
+  // Good ±240 ms. A tap 240–300 ms early on a note counts as its miss; earlier taps are ignored.
+  const W_PERFECT = 0.15, W_GREAT = 0.19, W_GOOD = 0.24, W_EARLY_MISS = 0.3;
+  const HOLD_RELEASE_GRACE = 0.25;
   const FLICK_DIST = 24;      // px of travel that turns a touch into a flick
   const FLICK_WINDOW = 0.3;   // s after the touch to complete the swipe
   const ARC_GRACE = 0.2;      // s: an arc tick passes if a finger was on the arc this recently
