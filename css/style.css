@@ -731,6 +731,10 @@ html[data-tone="light"].has-bg .dropzone { background: rgb(var(--bg2-rgb) / 0.55
 html[data-tone="light"].has-bg .tabbar { background: rgb(var(--bg2-rgb) / 0.82); }
 
 /* Theme picker */
+.theme-pics { display: grid; gap: 10px; justify-items: start; margin: 4px 0 14px; padding: 12px 14px; border-radius: 16px; background: var(--card); border: 1px dashed rgb(var(--c1-rgb) / 0.45); }
+.theme-pics .fine { margin: 0; }
+.theme-pics .status { text-align: left; }
+.theme-pics .status:empty { display: none; }
 .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .theme-card {
   display: flex; flex-direction: column; gap: 8px; padding: 8px 8px 10px;

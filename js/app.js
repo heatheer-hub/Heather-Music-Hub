@@ -1212,6 +1212,28 @@
         '<span class="theme-name">' + th.name + '</span><span class="theme-state">' + state + '</span></button>';
     }));
     $('theme-grid').innerHTML = cards.join('');
+    const missing = (await Promise.all(PTThemes.THEMES.filter(th => th.file).map(themeImageUrl))).filter(u => !u).length;
+    $('theme-pics').classList.toggle('hidden', !missing);
+  }
+
+  // Pictures chosen by hand (from the Background folder): matched to their themes by file name.
+  async function addThemePictures(files) {
+    const status = $('theme-status');
+    let added = 0;
+    const unknown = [];
+    for (const f of files) {
+      const th = PTThemes.byFile(f.name);
+      if (!th) { unknown.push(f.name); continue; }
+      await saveThemeImage(th.id, new Uint8Array(await f.arrayBuffer()));
+      added++;
+    }
+    status.classList.toggle('error', !added);
+    status.textContent = (added ? 'Added ' + added + (added === 1 ? ' picture.' : ' pictures.') : 'No theme pictures found.') +
+      (unknown.length ? ' Not a theme picture: ' + unknown.join(', ') + '. Pick the files from the Background folder so their names stay the same.' : '') +
+      (added && PTCloud.config() ? ' Uploading to the cloud library…' : '');
+    await applyAppTheme();
+    renderRewards();
+    if (added && PTCloud.config()) syncCloud();
   }
 
   // Cloud: theme pictures travel in the private repository too ("backgrounds/<id>.jpg").
@@ -1422,6 +1444,11 @@
     $('btn-newsong').addEventListener('click', () => { input.value = ''; show('screen-home'); });
     initLibrary();
     $('cloud-card').addEventListener('click', onCloudCard);
+    $('theme-pics-input').addEventListener('change', (e) => {
+      const files = [...e.target.files];
+      e.target.value = '';
+      if (files.length) addThemePictures(files);
+    });
     $('theme-grid').addEventListener('click', (e) => {
       const b = e.target.closest('[data-theme]');
       if (!b) return;

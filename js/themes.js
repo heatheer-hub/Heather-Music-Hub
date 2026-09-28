@@ -56,7 +56,12 @@
   function fontFor(theme) { return theme.id === 'classic' ? FONT_CLASSIC : FONT_STORY; }
 
   function byId(id) { return THEMES.find(t => t.id === id) || THEMES[0]; }
-  function byFile(name) { return THEMES.find(t => t.file && t.file.normalize('NFC') === String(name).normalize('NFC')) || null; }
+  // Matches a picture file to its theme by name, ignoring case, the extension and copy suffixes
+  // such as " (1)" that a second download adds.
+  function nameKey(name) {
+    return String(name).normalize('NFC').toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/\s*\(\d+\)$/, '').trim();
+  }
+  function byFile(name) { const k = nameKey(name); return THEMES.find(t => t.file && nameKey(t.file) === k) || null; }
   function rgbOf(hex) {
     const v = parseInt(hex.slice(1), 16);
     return (v >> 16) + ' ' + ((v >> 8) & 255) + ' ' + (v & 255);
