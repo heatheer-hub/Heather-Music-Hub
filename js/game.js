@@ -17,6 +17,10 @@
   // Timing windows (seconds from the note's exact time): Perfect ±150 ms, Great ±190 ms,
   // Good ±240 ms. A tap 240–300 ms early on a note counts as its miss; earlier taps are ignored.
   const W_PERFECT = 0.15, W_GREAT = 0.19, W_GOOD = 0.24, W_EARLY_MISS = 0.3;
+  // Hit zone: a tile already counts once it is in the last 40% of its path to the line (the lit
+  // band above the line), not only near the line. Earlier than W_GOOD it scores GOOD; a tap
+  // before the tile reaches the zone does nothing.
+  const HIT_ZONE = 0.4;
   const HOLD_RELEASE_GRACE = 0.25;
   const FLICK_DIST = 24;      // px of travel that turns a touch into a flick
   const FLICK_WINDOW = 0.3;   // s after the touch to complete the swipe
@@ -416,6 +420,8 @@
       }
     }
 
+    inZone(n, t) { return t - n.t >= -W_EARLY_MISS || this.S.at(n.t) - this.S.at(t) <= HIT_ZONE; }
+
     judgeOf(dt) {
       const a = Math.abs(dt);
       return a <= W_PERFECT ? 'perfect' : a <= W_GREAT ? 'great' : 'good';
@@ -431,10 +437,9 @@
       // note it was meant for instead of jumping ahead to the next one).
       const n = this.notes[q[this.laneIdx[lane]]];
       const dt = t - n.t;
-      if (dt < -W_EARLY_MISS) return; // nothing close: harmless tap
-      if (slide && dt < -W_GOOD) return; // sliding past a lane early is not a miss
+      if (dt < -W_GOOD && (slide || !this.inZone(n, t))) return; // not in the zone yet: harmless tap
       this.laneIdx[lane]++;
-      if (dt < -W_GOOD || dt > W_GOOD) { this.missNote(n, t); return; }
+      if (dt > W_GOOD) { this.missNote(n, t); return; }
       if (n.type === 'flick' && !viaKey) {
         n.flickBy = id; n.flickDt = dt; n.flickAt = t;
         this.pendingFlicks.push(n);
@@ -472,7 +477,7 @@
         if (s.combo > s.maxCombo) s.maxCombo = s.combo;
         if (s.combo % 50 === 0) { this.milestone = s.combo; this.milestoneAt = t; }
       }
-      if (dt != null) { s.offSum += dt; s.offN++; }
+      if (dt != null && Math.abs(dt) <= W_GOOD) { s.offSum += dt; s.offN++; }
       this.lastJudge = j; this.lastJudgeAt = t; this.lastJudgeDt = dt == null ? 0 : dt;
       if (j !== 'miss') this.comboBumpAt = t;
     }
@@ -843,6 +848,12 @@
       g.fillRect(fx, 0, fw, H);
       g.fillStyle = th ? th.game.line : 'rgba(160,190,255,0.12)';
       for (let l = 0; l <= 4; l++) g.fillRect(Math.round(fx + l * lw) - 0.5, 0, 1, hitY);
+      const zoneTop = hitY * (1 - HIT_ZONE);
+      const zg = g.createLinearGradient(0, zoneTop, 0, hitY);
+      zg.addColorStop(0, 'rgba(' + this.accentRgb + ',0)');
+      zg.addColorStop(1, 'rgba(' + this.accentRgb + ',0.13)');
+      g.fillStyle = zg;
+      g.fillRect(fx, zoneTop, fw, hitY - zoneTop);
       for (let l = 0; l < 4; l++) {
         const x = fx + l * lw + 5, w = lw - 10, y = hitY + 10, h = H - hitY - 22;
         if (h < 20) break;
@@ -895,7 +906,7 @@
         const a = Math.max(pressed.has(l) ? 0.14 : 0, flash * 0.22);
         if (a > 0.01) {
           g.fillStyle = 'rgba(' + this.accentRgb + ',' + a + ')';
-          g.fillRect(fx + l * lw + 1, hitY - H * 0.35, lw - 2, H * 0.35);
+          g.fillRect(fx + l * lw + 1, hitY * (1 - HIT_ZONE), lw - 2, hitY * HIT_ZONE);
           g.fillRect(fx + l * lw + 5, hitY + 10, lw - 10, H - hitY - 22);
         }
       }
@@ -929,7 +940,7 @@
           if (n.hold === 2) continue;
           const yTail = this.yAt(n.t + n.dur, dNow);
           const holding = n.hold === 1;
-          let bottom = holding ? hitY : yHead;
+          let bottom = holding ? Math.min(hitY, yHead) : yHead;
           const dim = n.hold === 3 || n.state === 2;
           if (bottom > H + 10 && yTail > H) continue;
           const top = Math.min(yTail, bottom - 10);
@@ -1100,10 +1111,9 @@
       for (let k = this.skyIdx; k < this.skyQ.length; k++) {
         const n = this.notes[this.skyQ[k]];
         const dt = t - n.t;
-        if (dt < -W_EARLY_MISS) break;
+        if (dt < -W_GOOD && !this.inZone(n, t)) break;
         if (n.state !== 0 || dt > W_GOOD) continue;
         if (!fits(n)) continue;
-        if (dt < -W_GOOD) { this.missNote(n, t); return true; }
         this.hitNote(n, this.judgeOf(dt), t, dt);
         return true;
       }
@@ -1248,6 +1258,16 @@
         g.lineTo(this.floorX(1, z), this.floorY(z));
         g.stroke();
       }
+      // Hit zone band on the floor.
+      if (!this.zoneFill || this.zoneFillY !== this.y1) {
+        const zg = g.createLinearGradient(0, this.floorY(HIT_ZONE), 0, this.y1);
+        zg.addColorStop(0, 'rgba(' + this.accentRgb + ',0)');
+        zg.addColorStop(1, 'rgba(' + this.accentRgb + ',0.14)');
+        this.zoneFill = zg; this.zoneFillY = this.y1;
+      }
+      this.quad(0, 1, 0, HIT_ZONE);
+      g.fillStyle = this.zoneFill;
+      g.fill();
       // Pressed lanes light up.
       const pressed = new Set();
       for (const p of this.ptrs.values()) if (p.lane >= 0) pressed.add(p.lane);
@@ -1255,7 +1275,7 @@
         const flash = Math.max(0, 1 - (now - this.laneFlash[l]) / 0.22);
         const a = Math.max(pressed.has(l) ? 0.25 : 0, flash * 0.4);
         if (a < 0.01) continue;
-        const z1 = 0.4;
+        const z1 = HIT_ZONE;
         g.beginPath();
         g.moveTo(this.floorX(l / 4, 0), this.y1);
         g.lineTo(this.floorX((l + 1) / 4, 0), this.y1);
@@ -1305,7 +1325,7 @@
         const missed = n.state === 2;
         if (n.type === 'hold') {
           const holding = n.hold === 1;
-          const zHead = holding ? 0 : z;
+          const zHead = holding ? Math.max(0, z) : z;
           const zTail = Math.min(1.05, this.S.at(n.t + n.dur) - dNow);
           if (zTail < -0.2) continue;
           g.globalAlpha = fade * (n.hold === 3 || missed ? 0.3 : 1);

@@ -51,7 +51,9 @@ turn back.
 The lane letters show faintly under the lanes. Arrow keys and `1`–`4` also work as lanes.
 
 **Scoring.** Tap, flick and sky notes count once, holds twice (the press and the release), and
-arcs once per half-beat tick. Perfect / Great / Good / Miss windows are ±45 / 90 / 135 ms.
+arcs once per half-beat tick. Perfect / Great / Good windows are ±150 / 190 / 240 ms. Earlier than that, a tap
+still counts as Good while the tile is inside the hit zone, the last 40% of its path to the line
+(`HIT_ZONE` in `js/game.js`, drawn as a glowing band); a tap before the zone does nothing.
 Score = 900,000 × accuracy + 100,000 × (max combo ÷ total), so a flawless run is 1,000,000.
 
 ## Records and rewards
